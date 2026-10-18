@@ -8,6 +8,10 @@
     "check": "ultracite check",
     "dev": "pnpm -r --parallel --filter \"./services/*\" dev",
     "fix": "ultracite fix",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "infra:reset": "docker compose down -v",
+    "infra:up": "docker compose up -d --wait",
     "start": "pnpm -r --parallel --filter \"./services/*\" start",
     "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
     "typecheck": "tsc -p tsconfig.test.json"

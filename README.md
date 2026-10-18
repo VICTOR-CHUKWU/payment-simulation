@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold is in place; no service features are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold and local infrastructure (NATS, Mailpit) are in place; no service features are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -43,14 +43,18 @@ Node.js 24, TypeScript, Express, NATS JetStream, Zod, pino, Jest and supertest, 
 
 - Node.js 24 (`.nvmrc` is included, so `nvm use` works)
 - pnpm. Run `corepack enable`, or install pnpm on its own. pnpm switches to the version pinned in `package.json`.
+- Docker with Compose v2.1.1 or later (`docker compose`), for NATS and the mail catcher.
 
 ### Install and run
 
 ```sh
 pnpm install
 cp .env.example .env
+pnpm infra:up
 pnpm dev
 ```
+
+`pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
 `pnpm dev` starts all three services in watch mode. To run the compiled build instead:
 
@@ -59,7 +63,26 @@ pnpm build
 pnpm start
 ```
 
-Starting NATS and the mail catcher, and the seeded demo accounts, will be added with the milestones that introduce them.
+### Local infrastructure
+
+| Service | Address |
+|---|---|
+| NATS | `nats://localhost:4222` |
+| NATS monitoring | http://localhost:8222 |
+| Mailpit web UI (caught emails) | http://localhost:8025 |
+| Mailpit SMTP | `localhost:1025` |
+
+All ports listen on `127.0.0.1` only. If NATS or Mailpit is already running directly on your machine (for example through Homebrew), stop it first: it would hold the same port and answer instead of the container.
+
+```sh
+pnpm infra:logs    # follow NATS and Mailpit logs
+pnpm infra:down    # stop containers, keep JetStream data
+pnpm infra:reset   # stop containers and wipe JetStream data
+```
+
+Mailpit keeps emails in memory, so they are cleared whenever its container stops.
+
+The seeded demo accounts will be added with the milestone that introduces them.
 
 ### Checks
 

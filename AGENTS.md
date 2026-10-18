@@ -16,6 +16,10 @@ Run everything from the repo root with pnpm (Node 24, pnpm version pinned in `pa
 | `pnpm test` | Jest (ESM) across all packages |
 | `pnpm check` | Ultracite (Biome) lint and format check, read-only |
 | `pnpm fix` | Ultracite autofix |
+| `pnpm infra:up` | Start NATS (JetStream) and Mailpit in Docker, waiting until healthy |
+| `pnpm infra:down` | Stop the containers, keep JetStream data |
+| `pnpm infra:logs` | Follow the container logs |
+| `pnpm infra:reset` | Stop the containers and delete JetStream data |
 
 Before calling work done, run `pnpm check`, `pnpm typecheck` and `pnpm test`, plus `pnpm build` when package boundaries or tsconfigs change.
 
