@@ -1,0 +1,13 @@
+{
+  "name": "@payment-be/payment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions=development --env-file-if-exists=../../.env src/main.ts",
+    "start": "node --env-file-if-exists=../../.env dist/main.js"
+  },
+  "dependencies": {
+    "@payment-be/shared": "workspace:*"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "payment-be",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "check": "ultracite check",
+    "dev": "pnpm -r --parallel --filter \"./services/*\" dev",
+    "fix": "ultracite fix",
+    "start": "pnpm -r --parallel --filter \"./services/*\" start",
+    "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
+    "typecheck": "tsc -p tsconfig.test.json"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/jest": "30.0.0",
+    "@types/node": "24.19.2",
+    "jest": "30.5.2",
+    "ts-jest": "29.4.15",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "ultracite": "8.0.1"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24"
+  }
+}

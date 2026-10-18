@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "libs/shared" },
+    { "path": "services/auth" },
+    { "path": "services/payment" },
+    { "path": "services/notification" }
+  ]
+}
