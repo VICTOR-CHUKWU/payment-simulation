@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { hashPassword } from "./password.js";
+import { hashPassword, passwordSchema, verifyPassword } from "./password.js";
 
 const BCRYPT_COST_10 = /^\$2[aby]\$10\$/;
 
@@ -18,5 +18,29 @@ describe("hashPassword", () => {
       hashPassword("same password"),
     ]);
     expect(first).not.toBe(second);
+  });
+});
+
+describe("verifyPassword", () => {
+  it("accepts the right password and rejects a wrong one", async () => {
+    const hash = await hashPassword("correct horse");
+    await expect(verifyPassword("correct horse", hash)).resolves.toBe(true);
+    await expect(verifyPassword("wrong horse", hash)).resolves.toBe(false);
+  });
+});
+
+describe("passwordSchema", () => {
+  it.each([
+    ["8 characters", "a".repeat(8)],
+    ["exactly 72 bytes", "é".repeat(36)],
+  ])("accepts %s", (_label, password) => {
+    expect(passwordSchema.safeParse(password).success).toBe(true);
+  });
+
+  it.each([
+    ["7 characters", "a".repeat(7)],
+    ["73 bytes in under 72 characters", `${"é".repeat(36)}a`],
+  ])("rejects %s", (_label, password) => {
+    expect(passwordSchema.safeParse(password).success).toBe(false);
   });
 });

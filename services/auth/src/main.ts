@@ -44,7 +44,13 @@ try {
     users: repository,
   });
   const server = await listen(
-    createApp({ checks: [check], docs, logger }),
+    createApp({
+      checks: [check],
+      docs,
+      jwtSecret: config.JWT_SECRET,
+      logger,
+      users: repository,
+    }),
     config.AUTH_PORT
   );
   logger.info(

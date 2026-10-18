@@ -1,8 +1,5 @@
+import { roleSchema } from "@payment-be/shared";
 import { z } from "zod";
-
-export const roleSchema = z.enum(["user", "admin"]);
-
-export type Role = z.infer<typeof roleSchema>;
 
 export const userSchema = z.object({
   createdAt: z.iso.datetime(),

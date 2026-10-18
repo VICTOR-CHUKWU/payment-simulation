@@ -4,6 +4,7 @@ import { authConfigSchema } from "./config.js";
 const ADMIN_PASSWORD_NAMED = /SEED_ADMIN_PASSWORD/;
 const USER_PASSWORD_NAMED = /SEED_USER_PASSWORD/;
 const USER_EMAIL_NAMED = /SEED_USER_EMAIL/;
+const JWT_SECRET_NAMED = /JWT_SECRET/;
 
 const load = (env: Record<string, string>) => loadConfig(authConfigSchema, env);
 
@@ -26,17 +27,36 @@ describe("authConfigSchema", () => {
     expect(loadProduction).toThrow(USER_PASSWORD_NAMED);
   });
 
-  it("accepts production with both seed passwords", () => {
-    expect(
+  it("requires JWT_SECRET in production and names it", () => {
+    expect(() =>
       load({
         NODE_ENV: "production",
         SEED_ADMIN_PASSWORD: "admin-secret",
         SEED_USER_PASSWORD: "user-secret",
       })
+    ).toThrow(JWT_SECRET_NAMED);
+  });
+
+  it("accepts production with both seed passwords and JWT_SECRET", () => {
+    const secret = "s".repeat(32);
+    expect(
+      load({
+        JWT_SECRET: secret,
+        NODE_ENV: "production",
+        SEED_ADMIN_PASSWORD: "admin-secret",
+        SEED_USER_PASSWORD: "user-secret",
+      })
     ).toMatchObject({
+      JWT_SECRET: secret,
       SEED_ADMIN_PASSWORD: "admin-secret",
       SEED_USER_PASSWORD: "user-secret",
     });
+  });
+
+  it("applies the shared dev JWT_SECRET outside production", () => {
+    expect(
+      load({ NODE_ENV: "development" }).JWT_SECRET.length
+    ).toBeGreaterThanOrEqual(32);
   });
 
   it("rejects a password over 72 bytes even when under 72 characters", () => {

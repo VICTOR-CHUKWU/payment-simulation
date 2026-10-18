@@ -1,4 +1,13 @@
 // biome-ignore lint/performance/noBarrelFile: package entry point
+export {
+  ACCESS_TOKEN_TTL_SECONDS,
+  type AccessTokenClaims,
+  accessTokenClaimsSchema,
+  jwtConfigSchema,
+  type Role,
+  resolveJwtSecret,
+  roleSchema,
+} from "./auth.js";
 export { baseConfigSchema, loadConfig } from "./config.js";
 export {
   AppError,

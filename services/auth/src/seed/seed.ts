@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { Logger, Repository } from "@payment-be/shared";
+import type { Logger, Repository, Role } from "@payment-be/shared";
 import { hashPassword } from "../core/index.js";
-import { normalizeEmail, type Role, type User } from "../user/index.js";
+import { normalizeEmail, type User } from "../user/index.js";
 
 export interface SeedAccount {
   email: string;

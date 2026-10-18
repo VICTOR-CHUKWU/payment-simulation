@@ -6,25 +6,42 @@ import {
   type Logger,
   notFoundHandler,
   type ReadinessCheck,
+  type Repository,
 } from "@payment-be/shared";
 import express, { type Express } from "express";
+import {
+  authRouter,
+  createAuthController,
+  createAuthService,
+} from "./auth/index.js";
 import { buildDocument } from "./openapi.js";
+import { createUserService, type User } from "./user/index.js";
 
 export function createApp({
   checks,
   docs,
+  jwtSecret,
   logger,
+  users,
 }: {
   checks: ReadinessCheck[];
   docs: boolean;
+  jwtSecret: string;
   logger: Logger;
+  users: Repository<User>;
 }): Express {
+  const authService = createAuthService({
+    jwtSecret,
+    userService: createUserService(users),
+  });
   const app = express();
   app.use(httpLogger(logger));
   app.use(healthRouter(checks));
   if (docs) {
     app.use(docsRouter(buildDocument()));
   }
+  app.use("/auth", express.json({ limit: "16kb" }));
+  app.use(authRouter(createAuthController(authService)));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users and seeds demo accounts. No business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. Payment and notification endpoints are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -54,7 +54,9 @@ pnpm infra:up
 pnpm dev
 ```
 
-`.env.example` lists the environment variables with values that work locally. The two seed passwords are commented out, because `auth` falls back to demo values outside production (see [Storage and demo accounts](#storage-and-demo-accounts)).
+`.env.example` lists the environment variables with values that work locally. The two seed passwords and `JWT_SECRET` are commented out, because they fall back to demo values outside production (see [Storage and demo accounts](#storage-and-demo-accounts)).
+
+`JWT_SECRET` signs and verifies access tokens, so every service must use the same value. It must be at least 32 characters. Outside production, services share a built-in dev secret. With `NODE_ENV=production` it has no default: set it, or `auth` refuses to start.
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -136,7 +138,7 @@ pnpm test        # Jest
 
 ## API
 
-Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod schemas. Only the health endpoints exist so far; endpoints will be summarised here as they land.
+Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod schemas. Endpoints are summarised below as they land.
 
 | Service | Swagger UI | Spec |
 |---|---|---|
@@ -147,6 +149,27 @@ Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod sche
 The docs are served only when `NODE_ENV=development`. With `test` or `production`, `/docs` returns the usual `404`.
 
 Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
+
+### Auth endpoints
+
+| Method | Path | Body | Success | Errors |
+|---|---|---|---|---|
+| `POST` | `/auth/register` | `{ email, password }` | `201` with `{ id, email, role, createdAt }` | `400`, `409 email-taken`, `413`, `415` |
+| `POST` | `/auth/login` | `{ email, password }` | `200` with `{ accessToken, tokenType: "Bearer", expiresIn }` | `400`, `401 invalid-credentials`, `413`, `415` |
+
+- Register always creates a `user`. Emails are trimmed and lowercased, so `Ada@Example.com` and `ada@example.com` are the same account. Passwords must be 8 to 72 bytes. Any other field in the body, such as `role`, is rejected with `400`.
+- Login returns an HS256 JWT valid for 24 hours (`expiresIn` is in seconds), with the claims `sub` (user ID), `email`, `role`, `iat` and `exp`. An unknown email and a wrong password get the same `401`.
+- Request bodies must be JSON (`Content-Type: application/json`) and at most 16 kB.
+
+```sh
+curl -i -X POST localhost:3001/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"ada@example.com","password":"Passw0rd!"}'
+
+curl -s -X POST localhost:3001/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"Admin123!"}'
+```
 
 ### Errors
 
@@ -177,6 +200,8 @@ Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/
 | 400 | `validation-error` | The request does not match its schema |
 | 400 | `malformed-json` | The request body is not valid JSON |
 | 400–499 | the status name in kebab case, for example `not-found` | Other client errors |
+| 401 | `invalid-credentials` | Login with an unknown email or a wrong password |
+| 409 | `email-taken` | Register with an email that already has an account |
 | 409 | `version-conflict` | The resource changed since it was read; fetch it and retry |
 | 413 | `payload-too-large` | The request body is too large |
 | 415 | `unsupported-media-type` | The body's media type, charset or encoding is not supported |
@@ -190,7 +215,7 @@ curl -i localhost:3002/nope
 
 ## Testing
 
-Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. This section will grow to cover API and cross-service integration tests.
+Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. API tests drive each service's `createApp` with supertest, using the in-memory storage adapter, so they need neither Docker nor a running server. This section will grow to cover cross-service integration tests.
 
 ## Project docs
 
