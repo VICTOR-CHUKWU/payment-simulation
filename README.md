@@ -56,7 +56,7 @@ pnpm dev
 
 `.env.example` lists the environment variables with values that work locally. The two seed passwords and `JWT_SECRET` are commented out, because they fall back to demo values outside production (see [Storage and demo accounts](#storage-and-demo-accounts)).
 
-`JWT_SECRET` signs and verifies access tokens, so every service must use the same value. It must be at least 32 characters. Outside production, services share a built-in dev secret. With `NODE_ENV=production` it has no default: set it, or `auth` refuses to start.
+`JWT_SECRET` signs access tokens in `auth`, and `payment` and `notification` verify them with it locally, so every service must use the same value. It must be at least 32 characters, or the service refuses to start. Outside production, services share a built-in dev secret. With `NODE_ENV=production` it has no default: set it, or every service refuses to start.
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -201,6 +201,9 @@ Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/
 | 400 | `malformed-json` | The request body is not valid JSON |
 | 400–499 | the status name in kebab case, for example `not-found` | Other client errors |
 | 401 | `invalid-credentials` | Login with an unknown email or a wrong password |
+| 401 | `unauthorized` | A protected endpoint was called without an `Authorization: Bearer <token>` header. The response carries `WWW-Authenticate: Bearer` |
+| 401 | `invalid-token` | The access token is invalid, expired or has bad claims; log in again. The response carries `WWW-Authenticate: Bearer error="invalid_token"` |
+| 403 | `forbidden` | The caller's role is not allowed to use the endpoint |
 | 409 | `email-taken` | Register with an email that already has an account |
 | 409 | `version-conflict` | The resource changed since it was read; fetch it and retry |
 | 413 | `payload-too-large` | The request body is too large |

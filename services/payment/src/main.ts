@@ -1,5 +1,4 @@
 import {
-  baseConfigSchema,
   connectNats,
   createLogger,
   drainNats,
@@ -8,14 +7,10 @@ import {
   natsCheck,
   onShutdown,
 } from "@payment-be/shared";
-import { z } from "zod";
 import { createApp } from "./app.js";
+import { paymentConfigSchema } from "./config/index.js";
 
-const config = loadConfig(
-  baseConfigSchema.extend({
-    PAYMENT_PORT: z.coerce.number().int().min(1).max(65_535).default(3002),
-  })
-);
+const config = loadConfig(paymentConfigSchema);
 
 const docs = config.NODE_ENV === "development";
 
