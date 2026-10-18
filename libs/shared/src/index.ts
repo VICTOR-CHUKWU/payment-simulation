@@ -5,11 +5,18 @@ export {
   type EventEnvelope,
   eventEnvelopeSchema,
 } from "./events.js";
+export { healthRouter, natsCheck, type ReadinessCheck } from "./health.js";
 export {
   CORRELATION_ID_HEADER,
   connectNats,
+  drainNats,
   parseEvent,
   publishEvent,
 } from "./nats.js";
-
-export const SHARED_PACKAGE_NAME = "@payment-be/shared";
+export {
+  type ClosableServer,
+  createShutdown,
+  onShutdown,
+  type ShutdownOptions,
+  type ShutdownTask,
+} from "./shutdown.js";

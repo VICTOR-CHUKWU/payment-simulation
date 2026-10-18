@@ -1,8 +1,8 @@
-# payment-be
+# payment-simulation
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place; no service features are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints and shuts down gracefully; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -63,6 +63,22 @@ pnpm dev
 ```sh
 pnpm build
 pnpm start
+```
+
+A service stops at startup with a clear error if an environment variable is invalid or NATS is unreachable. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification) and exits.
+
+### Health checks
+
+| Service | Port | Liveness | Readiness |
+|---|---|---|---|
+| auth | 3001 | `/health/live` | `/health/ready` |
+| payment | 3002 | `/health/live` | `/health/ready` |
+| notification | 3003 | `/health/live` | `/health/ready` |
+
+Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` has no dependencies, so it is ready whenever it is listening.
+
+```sh
+curl -i localhost:3002/health/ready
 ```
 
 ### Local infrastructure
