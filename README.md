@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints and shuts down gracefully; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging and graceful shutdown; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -79,6 +79,18 @@ Liveness always returns `200` while the process is up. Readiness returns `200` w
 
 ```sh
 curl -i localhost:3002/health/ready
+```
+
+### Logging
+
+Each service logs one JSON object per line through pino. In development (`NODE_ENV=development`) the lines are printed in a readable, coloured format instead. `LOG_LEVEL` sets the minimum level (`info` by default; `silent` turns logging off).
+
+Every HTTP request gets an ID. If the request sends an `x-request-id` header of up to 128 letters, digits, `.`, `_` or `-`, that value is reused; otherwise a UUID is generated. The ID is returned in the `x-request-id` response header and appears as `correlationId` on every log line for that request, and it travels to other services in event headers. Search for one `correlationId` to follow a request across services. Health probes are not logged.
+
+Log lines identify a signed-in user by `userId` and `role`, never by email. The `authorization`, `cookie` and `set-cookie` headers, and any `password`, `token`, `accessToken` or `email` field, are replaced with `"[Redacted]"`.
+
+```sh
+curl -i -H 'x-request-id: abc-123' localhost:3002/nope
 ```
 
 ### Local infrastructure

@@ -7,12 +7,21 @@ export {
 } from "./events.js";
 export { healthRouter, natsCheck, type ReadinessCheck } from "./health.js";
 export {
+  bindLogUser,
+  createLogger,
+  httpLogger,
+  type Logger,
+  type LoggerOptions,
+  type LogUser,
+} from "./logger.js";
+export {
   CORRELATION_ID_HEADER,
   connectNats,
   drainNats,
   parseEvent,
   publishEvent,
 } from "./nats.js";
+export { listen } from "./server.js";
 export {
   type ClosableServer,
   createShutdown,
