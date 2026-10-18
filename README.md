@@ -156,6 +156,7 @@ Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/
 | 400 | `validation-error` | The request does not match its schema |
 | 400 | `malformed-json` | The request body is not valid JSON |
 | 400–499 | the status name in kebab case, for example `not-found` | Other client errors |
+| 409 | `version-conflict` | The resource changed since it was read; fetch it and retry |
 | 413 | `payload-too-large` | The request body is too large |
 | 415 | `unsupported-media-type` | The body's media type, charset or encoding is not supported |
 | 500 | `internal-error` | Anything unexpected |

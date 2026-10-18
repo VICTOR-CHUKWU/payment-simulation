@@ -32,6 +32,7 @@ export {
   type LoggerOptions,
   type LogUser,
 } from "./logger.js";
+export { createMemoryRepository } from "./memory-repository.js";
 export {
   CORRELATION_ID_HEADER,
   connectNats,
@@ -39,6 +40,15 @@ export {
   parseEvent,
   publishEvent,
 } from "./nats.js";
+export {
+  DuplicateRecordError,
+  type NewRecord,
+  RecordNotFoundError,
+  type RecordPatch,
+  type Repository,
+  VersionConflictError,
+  type Versioned,
+} from "./repository.js";
 export { listen } from "./server.js";
 export {
   type ClosableServer,
