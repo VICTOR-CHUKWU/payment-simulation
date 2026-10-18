@@ -1,4 +1,5 @@
 import {
+  corsPolicy,
   docsRouter,
   errorHandler,
   healthRouter,
@@ -6,6 +7,7 @@ import {
   type Logger,
   notFoundHandler,
   type ReadinessCheck,
+  securityHeaders,
 } from "@payment-be/shared";
 import express, { type Express } from "express";
 import { buildDocument } from "./openapi.js";
@@ -21,6 +23,8 @@ export function createApp({
 }): Express {
   const app = express();
   app.use(httpLogger(logger));
+  app.use(securityHeaders());
+  app.use(corsPolicy());
   app.use(healthRouter(checks));
   if (docs) {
     app.use(docsRouter(buildDocument()));

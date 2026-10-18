@@ -25,6 +25,7 @@ export {
   type ProblemOverrides,
   problemDetailsSchema,
   serviceUnavailable,
+  tooManyRequests,
   unauthorized,
   unprocessable,
 } from "./errors.js";
@@ -77,6 +78,7 @@ export {
   VersionConflictError,
   type Versioned,
 } from "./repository.js";
+export { corsPolicy, securityHeaders } from "./security.js";
 export { listen } from "./server.js";
 export {
   type ClosableServer,

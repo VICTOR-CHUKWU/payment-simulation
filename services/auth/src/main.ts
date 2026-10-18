@@ -49,6 +49,10 @@ try {
       docs,
       jwtSecret: config.JWT_SECRET,
       logger,
+      loginRateLimit: {
+        max: config.LOGIN_RATE_LIMIT_MAX,
+        windowMs: config.LOGIN_RATE_LIMIT_WINDOW_MS,
+      },
       users: repository,
     }),
     config.AUTH_PORT

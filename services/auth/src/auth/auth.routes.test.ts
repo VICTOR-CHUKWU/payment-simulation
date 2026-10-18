@@ -8,10 +8,14 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { hashPassword } from "../core/index.js";
 import type { User } from "../user/index.js";
+import type { LoginRateLimit } from "./index.js";
 
+const DIGITS = /^\d+$/;
 const PROBLEM_JSON = /^application\/problem\+json/;
 
-async function setup() {
+async function setup(
+  loginRateLimit: LoginRateLimit = { max: 1000, windowMs: 60_000 }
+) {
   const raw: string[] = [];
   const destination = new Writable({
     write(chunk, _encoding, callback) {
@@ -38,6 +42,7 @@ async function setup() {
     docs: false,
     jwtSecret: "s".repeat(32),
     logger,
+    loginRateLimit,
     users,
   });
   return { app, raw, users };
@@ -240,5 +245,86 @@ describe("auth logging", () => {
     expect(logs).not.toContain("User123!");
     expect(logs).not.toContain("Wrong123!");
     expect(logs).not.toContain(res.body.accessToken);
+  });
+});
+
+describe("login rate limit", () => {
+  const limit = { max: 2, windowMs: 60_000 };
+  const wrong = { email: "user@example.com", password: "Wrong123!" };
+  const right = { email: "user@example.com", password: "User123!" };
+
+  it("returns 429 once failed attempts exceed the limit", async () => {
+    const { app } = await setup(limit);
+
+    expect((await login(app, wrong)).status).toBe(401);
+    expect((await login(app, wrong)).status).toBe(401);
+    const res = await login(app, wrong);
+
+    expect(res.status).toBe(429);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(res.headers["retry-after"]).toMatch(DIGITS);
+    expect(res.headers.ratelimit).toEqual(expect.any(String));
+    expect(res.headers["ratelimit-policy"]).toEqual(expect.any(String));
+    expect(res.body).toMatchObject({
+      code: "too-many-requests",
+      instance: "/auth/login",
+      status: 429,
+      type: "about:blank",
+    });
+  });
+
+  it("does not count successful logins", async () => {
+    const { app } = await setup(limit);
+
+    expect((await login(app, right)).status).toBe(200);
+    expect((await login(app, right)).status).toBe(200);
+    expect((await login(app, right)).status).toBe(200);
+  });
+
+  it("stops a limited login before it reaches the controller", async () => {
+    const { app, raw } = await setup(limit);
+
+    await login(app, wrong);
+    await login(app, wrong);
+    const res = await login(app, right);
+
+    expect(res.status).toBe(429);
+    expect(raw.join("\n")).not.toContain('"msg":"user logged in"');
+  });
+
+  it("counts by socket IP and ignores forwarding headers", async () => {
+    const { app, raw } = await setup(limit);
+    const forwarded = (index: number) =>
+      login(app, wrong)
+        .set("x-forwarded-for", `203.0.113.${index}`)
+        .set("forwarded", `for=203.0.113.${index}`);
+
+    expect((await forwarded(1)).status).toBe(401);
+    expect((await forwarded(2)).status).toBe(401);
+    expect((await forwarded(3)).status).toBe(429);
+    expect(raw.join("\n")).not.toContain("_ERL_");
+  });
+
+  it("does not count bodies the JSON parser rejects", async () => {
+    const { app } = await setup(limit);
+    const malformed = () =>
+      request(app)
+        .post("/auth/login")
+        .set("content-type", "application/json")
+        .send('{"email":');
+
+    expect((await malformed()).body.code).toBe("malformed-json");
+    expect((await malformed()).body.code).toBe("malformed-json");
+    expect((await malformed()).body.code).toBe("malformed-json");
+    expect((await login(app, wrong)).status).toBe(401);
+  });
+
+  it("does not limit register", async () => {
+    const { app } = await setup(limit);
+
+    expect((await register(app, right)).status).toBe(409);
+    expect((await register(app, right)).status).toBe(409);
+    expect((await register(app, right)).status).toBe(409);
   });
 });

@@ -18,6 +18,7 @@ const logger = createLogger({
 
 const deps = () => ({
   jwtSecret: "s".repeat(32),
+  loginRateLimit: { max: 1000, windowMs: 60_000 },
   users: createMemoryRepository<User>(),
 });
 
@@ -93,6 +94,9 @@ describe("auth app", () => {
         "/health/ready",
       ])
     );
+    expect(Object.keys(res.body.paths["/auth/login"].post.responses)).toEqual(
+      expect.arrayContaining(["401", "429"])
+    );
   });
 
   it("serves Swagger UI when docs are enabled", async () => {
@@ -112,6 +116,21 @@ describe("auth app", () => {
       expect(res.status).toBe(404);
       expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
       expect(res.body.code).toBe("not-found");
+    }
+  );
+
+  it.each(["/health/live", "/nope"])(
+    "sends security and CORS headers on %s",
+    async (path) => {
+      const res = await request(
+        createApp({ checks: [], docs: false, logger, ...deps() })
+      ).get(path);
+      expect(res.headers["content-security-policy"]).toEqual(
+        expect.any(String)
+      );
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+      expect(res.headers).not.toHaveProperty("x-powered-by");
     }
   );
 });

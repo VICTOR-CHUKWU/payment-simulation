@@ -128,6 +128,7 @@ export const forbidden: ProblemFactory = problemFactory(403);
 export const notFound: ProblemFactory = problemFactory(404);
 export const conflict: ProblemFactory = problemFactory(409);
 export const unprocessable: ProblemFactory = problemFactory(422);
+export const tooManyRequests: ProblemFactory = problemFactory(429);
 export const serviceUnavailable: ProblemFactory = problemFactory(503);
 
 export function toJsonPointer(path: readonly PropertyKey[]): string {

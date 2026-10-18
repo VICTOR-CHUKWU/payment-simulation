@@ -29,7 +29,7 @@ export function registerAuthPaths(registry: OpenAPIRegistry): void {
   });
   registry.registerPath({
     description:
-      "Returns a 24-hour access token. An unknown email and a wrong password get the same 401.",
+      "Returns a 24-hour access token. An unknown email and a wrong password get the same 401. Failed attempts are limited per client IP; once over the limit, the response is a 429 with a `Retry-After` header.",
     method: "post",
     path: "/auth/login",
     request: {
@@ -40,7 +40,7 @@ export function registerAuthPaths(registry: OpenAPIRegistry): void {
         content: json(accessTokenResponseSchema),
         description: "Logged in",
       },
-      ...problemResponses(400, 401, 413, 415),
+      ...problemResponses(400, 401, 413, 415, 429),
     },
     summary: "Log in",
     tags: ["auth"],
