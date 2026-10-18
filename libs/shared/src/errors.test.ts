@@ -13,6 +13,7 @@ import {
   problemDetailsSchema,
   serviceUnavailable,
   toJsonPointer,
+  tooManyRequests,
   unauthorized,
   unprocessable,
 } from "./errors.js";
@@ -288,6 +289,7 @@ describe("problem helpers", () => {
     [notFound, 404, "not-found", "Not Found"],
     [conflict, 409, "conflict", "Conflict"],
     [unprocessable, 422, "unprocessable-entity", "Unprocessable Entity"],
+    [tooManyRequests, 429, "too-many-requests", "Too Many Requests"],
     [serviceUnavailable, 503, "service-unavailable", "Service Unavailable"],
   ])(
     "builds a plain HTTP problem by default",

@@ -50,7 +50,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-02-01 | Auth service scaffold with user model, repository and seeded admin + user accounts | done | [tasks/BE-02-01-auth-users-seed.md](tasks/BE-02-01-auth-users-seed.md) |
 | BE-02-02 | `POST /auth/register` and `POST /auth/login` (bcrypt, JWT with `sub`/`email`/`role` claims) | done | [tasks/BE-02-02-auth-register-login.md](tasks/BE-02-02-auth-register-login.md) |
 | BE-02-03 | Shared-lib auth middleware (JWT verification, role guard) | done | [tasks/BE-02-03-auth-middleware.md](tasks/BE-02-03-auth-middleware.md) |
-| BE-02-04 | HTTP hardening (helmet, CORS, rate limit on login) | todo | — |
+| BE-02-04 | HTTP hardening (helmet, CORS, rate limit on login) | in-progress | [tasks/BE-02-04-http-hardening.md](tasks/BE-02-04-http-hardening.md) |
 
 ## Phase 3 — Payments
 

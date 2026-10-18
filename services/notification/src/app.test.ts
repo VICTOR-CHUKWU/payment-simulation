@@ -88,4 +88,19 @@ describe("notification app", () => {
       expect(res.body.code).toBe("not-found");
     }
   );
+
+  it.each(["/health/live", "/nope"])(
+    "sends security and CORS headers on %s",
+    async (path) => {
+      const res = await request(
+        createApp({ checks: [], docs: false, logger })
+      ).get(path);
+      expect(res.headers["content-security-policy"]).toEqual(
+        expect.any(String)
+      );
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["access-control-allow-origin"]).toBe("*");
+      expect(res.headers).not.toHaveProperty("x-powered-by");
+    }
+  );
 });

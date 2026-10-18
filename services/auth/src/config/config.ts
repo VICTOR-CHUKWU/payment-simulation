@@ -20,6 +20,13 @@ export const authConfigSchema = baseConfigSchema
   .extend(jwtConfigSchema.shape)
   .extend({
     AUTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
+    LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+    LOGIN_RATE_LIMIT_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .min(1000)
+      .max(2_147_483_647)
+      .default(900_000),
     SEED_ADMIN_EMAIL: z.email().default("admin@example.com"),
     SEED_ADMIN_PASSWORD: seedPassword,
     SEED_USER_EMAIL: z.email().default("user@example.com"),

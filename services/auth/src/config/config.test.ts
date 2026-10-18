@@ -5,6 +5,8 @@ const ADMIN_PASSWORD_NAMED = /SEED_ADMIN_PASSWORD/;
 const USER_PASSWORD_NAMED = /SEED_USER_PASSWORD/;
 const USER_EMAIL_NAMED = /SEED_USER_EMAIL/;
 const JWT_SECRET_NAMED = /JWT_SECRET/;
+const LIMIT_MAX_NAMED = /LOGIN_RATE_LIMIT_MAX/;
+const LIMIT_WINDOW_NAMED = /LOGIN_RATE_LIMIT_WINDOW_MS/;
 
 const load = (env: Record<string, string>) => loadConfig(authConfigSchema, env);
 
@@ -13,6 +15,8 @@ describe("authConfigSchema", () => {
     expect(load({ NODE_ENV: "development" })).toMatchObject({
       AUTH_PORT: 3001,
       DATA_DIR: "data",
+      LOGIN_RATE_LIMIT_MAX: 10,
+      LOGIN_RATE_LIMIT_WINDOW_MS: 900_000,
       SEED_ADMIN_EMAIL: "admin@example.com",
       SEED_ADMIN_PASSWORD: "Admin123!",
       SEED_USER_EMAIL: "user@example.com",
@@ -88,6 +92,16 @@ describe("authConfigSchema", () => {
       expect.objectContaining({
         message: expect.not.stringContaining("short1"),
       })
+    );
+  });
+
+  it("rejects a login rate limit of zero", () => {
+    expect(() => load({ LOGIN_RATE_LIMIT_MAX: "0" })).toThrow(LIMIT_MAX_NAMED);
+  });
+
+  it("rejects a login rate limit window above the timer limit", () => {
+    expect(() => load({ LOGIN_RATE_LIMIT_WINDOW_MS: "2147483648" })).toThrow(
+      LIMIT_WINDOW_NAMED
     );
   });
 });

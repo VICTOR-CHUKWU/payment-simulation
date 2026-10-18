@@ -11,6 +11,7 @@
     "@payment-be/shared": "workspace:*",
     "bcryptjs": "3.0.3",
     "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
     "jose": "6.2.12",
     "zod": "4.6.7"
   },

@@ -58,6 +58,8 @@ pnpm dev
 
 `JWT_SECRET` signs access tokens in `auth`, and `payment` and `notification` verify them with it locally, so every service must use the same value. It must be at least 32 characters, or the service refuses to start. Outside production, services share a built-in dev secret. With `NODE_ENV=production` it has no default: set it, or every service refuses to start.
 
+`LOGIN_RATE_LIMIT_MAX` (default `10`) and `LOGIN_RATE_LIMIT_WINDOW_MS` (default `900000`, 15 minutes) set how many failed logins `auth` allows per client IP in each window (see [Auth endpoints](#auth-endpoints)).
+
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
 `pnpm dev` starts all three services in watch mode. To run the compiled build instead:
@@ -146,6 +148,8 @@ Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod sche
 | payment | http://localhost:3002/docs | http://localhost:3002/docs/openapi.json |
 | notification | http://localhost:3003/docs | http://localhost:3003/docs/openapi.json |
 
+Every service sends [helmet](https://helmetjs.github.io/)'s default security headers, including a Content Security Policy, and no `X-Powered-By`. CORS allows any origin without credentials, which is safe because access tokens travel in the `Authorization` header, not in cookies. Browsers can read the `x-request-id`, `Retry-After`, `RateLimit`, `RateLimit-Policy` and `WWW-Authenticate` response headers.
+
 The docs are served only when `NODE_ENV=development`. With `test` or `production`, `/docs` returns the usual `404`.
 
 Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
@@ -155,10 +159,11 @@ Once login and protected routes exist, call them from Swagger UI like this: log 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
 | `POST` | `/auth/register` | `{ email, password }` | `201` with `{ id, email, role, createdAt }` | `400`, `409 email-taken`, `413`, `415` |
-| `POST` | `/auth/login` | `{ email, password }` | `200` with `{ accessToken, tokenType: "Bearer", expiresIn }` | `400`, `401 invalid-credentials`, `413`, `415` |
+| `POST` | `/auth/login` | `{ email, password }` | `200` with `{ accessToken, tokenType: "Bearer", expiresIn }` | `400`, `401 invalid-credentials`, `413`, `415`, `429 too-many-requests` |
 
 - Register always creates a `user`. Emails are trimmed and lowercased, so `Ada@Example.com` and `ada@example.com` are the same account. Passwords must be 8 to 72 bytes. Any other field in the body, such as `role`, is rejected with `400`.
 - Login returns an HS256 JWT valid for 24 hours (`expiresIn` is in seconds), with the claims `sub` (user ID), `email`, `role`, `iat` and `exp`. An unknown email and a wrong password get the same `401`.
+- Login is rate limited per client IP: after `LOGIN_RATE_LIMIT_MAX` failed attempts (default 10) within `LOGIN_RATE_LIMIT_WINDOW_MS` (default 15 minutes), further logins from that IP get `429 too-many-requests`, even with the right password, until the window passes. Successful logins do not count. Any `400` from failed validation, `401`, `429` or `5xx` counts as a failure. Bodies the JSON parser rejects (`413`, `415`, malformed JSON) are answered before the limiter runs, so they are neither counted nor limited. Every other login response carries `RateLimit` and `RateLimit-Policy` headers, and a `429` also carries `Retry-After` in seconds. Counts are kept in memory and reset when `auth` restarts.
 - Request bodies must be JSON (`Content-Type: application/json`) and at most 16 kB.
 
 ```sh
@@ -208,6 +213,7 @@ Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/
 | 409 | `version-conflict` | The resource changed since it was read; fetch it and retry |
 | 413 | `payload-too-large` | The request body is too large |
 | 415 | `unsupported-media-type` | The body's media type, charset or encoding is not supported |
+| 429 | `too-many-requests` | Too many failed logins from this IP. The response carries `Retry-After` in seconds |
 | 500 | `internal-error` | Anything unexpected |
 
 A `500` response never includes the error message, stack or request body. The real error is logged once, on the request's log line, with its `correlationId`.
