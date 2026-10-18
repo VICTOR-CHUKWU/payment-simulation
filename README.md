@@ -1,4 +1,4 @@
-# payment-be
+# payment-simulation
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
