@@ -40,7 +40,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-01-05 | Structured logging with redaction and request/correlation-ID middleware (shared lib) | done | [tasks/BE-01-05-structured-logging.md](tasks/BE-01-05-structured-logging.md) |
 | BE-01-06 | Central error model and error-handling middleware (shared lib) | done | [tasks/BE-01-06-error-model.md](tasks/BE-01-06-error-model.md) |
 | BE-01-07 | Generic repository interface (with compare-and-set updates) + in-memory adapter (shared lib) | done | [tasks/BE-01-07-repository-interface.md](tasks/BE-01-07-repository-interface.md) |
-| BE-01-08 | JSON-file adapter with serialized, atomic writes (temp file + rename, single writer per file) (shared lib) | todo | — |
+| BE-01-08 | JSON-file adapter with serialized, atomic writes (temp file + rename, single writer per file) (shared lib) | done | [tasks/BE-01-08-json-file-adapter.md](tasks/BE-01-08-json-file-adapter.md) |
 | BE-01-09 | OpenAPI setup per service (spec generated from Zod schemas, Swagger UI at `/docs`) | todo | — |
 
 ## Phase 2 — Users & Auth

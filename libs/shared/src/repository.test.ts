@@ -1,7 +1,15 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Writable } from "node:stream";
 import express from "express";
 import request from "supertest";
+import { z } from "zod";
 import { AppError, errorHandler } from "./errors.js";
+import {
+  createFileRepository,
+  type FileRepository,
+} from "./file-repository.js";
 import { createLogger, httpLogger } from "./logger.js";
 import { createMemoryRepository } from "./memory-repository.js";
 import {
@@ -23,8 +31,48 @@ type Shape = Versioned &
 
 type AdapterFactory = () => Repository<Item> | Promise<Repository<Item>>;
 
+const itemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  note: z.string().optional(),
+  tags: z.array(z.string()),
+  version: z.number().int(),
+});
+
+const shapeSchema = z.intersection(
+  z.object({ id: z.string(), version: z.number().int() }),
+  z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("circle"), radius: z.number() }),
+    z.object({ kind: z.literal("square"), side: z.number() }),
+  ])
+);
+
+const closers: (() => Promise<void>)[] = [];
+const tempDirs: string[] = [];
+
+async function openFileRepository<T extends Versioned>(
+  schema: z.ZodType<T>
+): Promise<FileRepository<T>> {
+  const dir = await mkdtemp(path.join(tmpdir(), "payment-be-repo-"));
+  tempDirs.push(dir);
+  const repository = await createFileRepository({
+    file: path.join(dir, "items.json"),
+    schema,
+  });
+  closers.push(repository.close);
+  return repository;
+}
+
+afterEach(async () => {
+  await Promise.all(closers.splice(0).map((close) => close()));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true }))
+  );
+});
+
 const adapters: [string, AdapterFactory][] = [
   ["memory", createMemoryRepository],
+  ["file", () => openFileRepository(itemSchema)],
 ];
 
 const PROBLEM_JSON = /^application\/problem\+json/;
@@ -182,9 +230,12 @@ describe.each(adapters)("%s", (_name, createRepository) => {
   });
 });
 
-describe("discriminated union records", () => {
+describe.each<[string, () => Repository<Shape> | Promise<Repository<Shape>>]>([
+  ["memory", createMemoryRepository],
+  ["file", () => openFileRepository<Shape>(shapeSchema)],
+])("discriminated union records (%s)", (_name, createRepository) => {
   it("keeps member-specific fields on insert and update", async () => {
-    const repo = createMemoryRepository<Shape>();
+    const repo = await createRepository();
     await repo.insert({ id: ID, kind: "circle", radius: 1 });
     const updated = await repo.update(ID, 1, { radius: 2 });
 

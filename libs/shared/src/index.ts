@@ -23,6 +23,13 @@ export {
   type EventEnvelope,
   eventEnvelopeSchema,
 } from "./events.js";
+export {
+  createFileRepository,
+  type FileRepository,
+  type FileRepositoryOptions,
+  type FileSystem,
+  storageCheck,
+} from "./file-repository.js";
 export { healthRouter, natsCheck, type ReadinessCheck } from "./health.js";
 export {
   bindLogUser,
@@ -57,3 +64,9 @@ export {
   type ShutdownOptions,
   type ShutdownTask,
 } from "./shutdown.js";
+export {
+  type OpenedRepository,
+  openRepository,
+  type StorageConfig,
+  storageConfigSchema,
+} from "./storage.js";
