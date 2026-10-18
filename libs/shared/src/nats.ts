@@ -14,7 +14,24 @@ export function connectNats(options: {
   name: string;
   url: string;
 }): Promise<NatsConnection> {
-  return connect({ name: options.name, servers: options.url });
+  return connect({
+    maxReconnectAttempts: -1,
+    name: options.name,
+    servers: options.url,
+  });
+}
+
+export async function drainNats(
+  nc: Pick<NatsConnection, "close" | "drain" | "isClosed">
+): Promise<void> {
+  try {
+    await nc.drain();
+  } finally {
+    // A drain that fails mid-outage leaves the client reconnecting forever, which keeps the process alive.
+    if (!nc.isClosed()) {
+      await nc.close();
+    }
+  }
 }
 
 export function publishEvent<T>(

@@ -6,7 +6,12 @@ import type {
 import { headers } from "@nats-io/transport-node";
 import { z } from "zod";
 import { createEvent } from "./events.js";
-import { CORRELATION_ID_HEADER, parseEvent, publishEvent } from "./nats.js";
+import {
+  CORRELATION_ID_HEADER,
+  drainNats,
+  parseEvent,
+  publishEvent,
+} from "./nats.js";
 
 const ack: PubAck = { domain: "", duplicate: false, seq: 1, stream: "TEST" };
 const dataSchema = z.object({ amount: z.number().int() });
@@ -88,5 +93,42 @@ describe("parseEvent", () => {
     expect(() =>
       parseEvent({ data: encode(JSON.stringify(event)) }, dataSchema)
     ).toThrow(z.ZodError);
+  });
+});
+
+describe("drainNats", () => {
+  function stubConnection(drain: () => Promise<void>) {
+    const calls: string[] = [];
+    let closed = false;
+    return {
+      calls,
+      nc: {
+        close: () => {
+          calls.push("close");
+          closed = true;
+          return Promise.resolve();
+        },
+        drain: async () => {
+          calls.push("drain");
+          await drain();
+          closed = true;
+        },
+        isClosed: () => closed,
+      },
+    };
+  }
+
+  it("drains without an extra close", async () => {
+    const { calls, nc } = stubConnection(() => Promise.resolve());
+    await drainNats(nc);
+    expect(calls).toEqual(["drain"]);
+  });
+
+  it("closes and rethrows when drain fails", async () => {
+    const { calls, nc } = stubConnection(() =>
+      Promise.reject(new Error("disconnected"))
+    );
+    await expect(drainNats(nc)).rejects.toThrow("disconnected");
+    expect(calls).toEqual(["drain", "close"]);
   });
 });
