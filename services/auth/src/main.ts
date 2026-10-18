@@ -14,6 +14,8 @@ const config = loadConfig(
   })
 );
 
+const docs = config.NODE_ENV === "development";
+
 const logger = createLogger({
   level: config.LOG_LEVEL,
   pretty: config.NODE_ENV === "development",
@@ -22,10 +24,13 @@ const logger = createLogger({
 
 try {
   const server = await listen(
-    createApp({ checks: [], logger }),
+    createApp({ checks: [], docs, logger }),
     config.AUTH_PORT
   );
-  logger.info({ port: config.AUTH_PORT }, "listening");
+  logger.info(
+    { port: config.AUTH_PORT, ...(docs ? { docs: "/docs" } : {}) },
+    "listening"
+  );
   onShutdown({ logger, server });
 } catch (err) {
   logger.fatal({ err }, "startup failed");

@@ -48,6 +48,16 @@ export {
   publishEvent,
 } from "./nats.js";
 export {
+  bearerSecurity,
+  buildOpenApiDocument,
+  createOpenApiRegistry,
+  docsRouter,
+  type OpenAPIRegistry,
+  type OpenApiDocument,
+  type OpenApiInfo,
+  problemResponses,
+} from "./openapi.js";
+export {
   DuplicateRecordError,
   type NewRecord,
   RecordNotFoundError,

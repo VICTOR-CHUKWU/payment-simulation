@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging and graceful shutdown; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -125,7 +125,17 @@ pnpm test        # Jest
 
 ## API
 
-Not available yet. Each service will serve Swagger UI, and endpoints will be summarised here.
+Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod schemas. Only the health endpoints exist so far; endpoints will be summarised here as they land.
+
+| Service | Swagger UI | Spec |
+|---|---|---|
+| auth | http://localhost:3001/docs | http://localhost:3001/docs/openapi.json |
+| payment | http://localhost:3002/docs | http://localhost:3002/docs/openapi.json |
+| notification | http://localhost:3003/docs | http://localhost:3003/docs/openapi.json |
+
+The docs are served only when `NODE_ENV=development`. With `test` or `production`, `/docs` returns the usual `404`.
+
+Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
 
 ### Errors
 

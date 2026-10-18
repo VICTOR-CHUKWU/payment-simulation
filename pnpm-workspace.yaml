@@ -4,5 +4,6 @@ packages:
 
 allowBuilds:
   "@parcel/watcher": false
+  "@scarf/scarf": false
   esbuild: false
   unrs-resolver: false
