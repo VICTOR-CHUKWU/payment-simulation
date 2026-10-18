@@ -1,5 +1,11 @@
-import { baseConfigSchema, storageConfigSchema } from "@payment-be/shared";
+import {
+  baseConfigSchema,
+  jwtConfigSchema,
+  resolveJwtSecret,
+  storageConfigSchema,
+} from "@payment-be/shared";
 import { z } from "zod";
+import { passwordSchema } from "../core/index.js";
 import { normalizeEmail } from "../user/index.js";
 
 const SEED_PASSWORD_KEYS = [
@@ -7,17 +13,11 @@ const SEED_PASSWORD_KEYS = [
   "SEED_USER_PASSWORD",
 ] as const;
 
-// bcrypt ignores everything past 72 bytes, and .max() counts UTF-16 units.
-const seedPassword = z
-  .string()
-  .min(8)
-  .refine((value) => Buffer.byteLength(value, "utf8") <= 72, {
-    message: "Must be at most 72 bytes",
-  })
-  .optional();
+const seedPassword = passwordSchema.optional();
 
 export const authConfigSchema = baseConfigSchema
   .extend(storageConfigSchema.shape)
+  .extend(jwtConfigSchema.shape)
   .extend({
     AUTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
     SEED_ADMIN_EMAIL: z.email().default("admin@example.com"),
@@ -49,6 +49,7 @@ export const authConfigSchema = baseConfigSchema
     }
     return {
       ...config,
+      JWT_SECRET: resolveJwtSecret(config, ctx),
       SEED_ADMIN_PASSWORD: config.SEED_ADMIN_PASSWORD ?? "Admin123!",
       SEED_USER_PASSWORD: config.SEED_USER_PASSWORD ?? "User123!",
     };

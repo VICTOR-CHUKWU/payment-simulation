@@ -1,8 +1,7 @@
 // biome-ignore lint/performance/noBarrelFile: module entry point
+export { normalizeEmail, type User, userSchema } from "./user.js";
 export {
-  normalizeEmail,
-  type Role,
-  roleSchema,
-  type User,
-  userSchema,
-} from "./user.js";
+  createUserService,
+  type NewUser,
+  type UserService,
+} from "./user.service.js";

@@ -52,7 +52,7 @@ Before calling work done, run `pnpm check`, `pnpm typecheck` and `pnpm test`, pl
 
 - No code comments unless one is essential to explain a non-obvious reason (a workaround, a protocol quirk, a deliberate trade-off). Never comment what the code already says.
 - No `console.*` anywhere, including scripts and tests. Log through the shared pino logger (from BE-01-05).
-- Service source is organised by folder under `src/`: `config/` (env schema), `core/` (cross-cutting helpers such as `password.ts`), one folder per module (`user/`, `payment/`, …) holding its model and, as they arrive, its controller, routes and service, plus task folders such as `seed/`. `app.ts`, `main.ts` and `openapi.ts` stay at the root of `src/`. Tests sit next to the file they cover.
+- Service source is organised by folder under `src/`: `config/` (env schema), `core/` (cross-cutting helpers such as `password.ts`), one folder per module (`user/`, `payment/`, …) holding its model and, as they arrive, its controller, routes and service, plus task folders such as `seed/`. Module files other than the model are named `<module>.<role>.ts` (`auth.service.ts`, `user.service.ts`). `app.ts`, `main.ts` and `openapi.ts` stay at the root of `src/`. Tests sit next to the file they cover.
 - Each folder has an `index.ts` that re-exports its public API by name (no `export *`), starting with `// biome-ignore lint/performance/noBarrelFile: module entry point`. Code outside a folder imports from its `index.js`; files inside a folder import siblings directly.
 
 ## Architecture constraints
