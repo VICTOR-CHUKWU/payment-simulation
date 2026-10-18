@@ -1,7 +1,9 @@
 import {
   baseConfigSchema,
   connectNats,
+  createLogger,
   drainNats,
+  listen,
   loadConfig,
   natsCheck,
   onShutdown,
@@ -15,9 +17,21 @@ const config = loadConfig(
   })
 );
 
-const nc = await connectNats({ name: "notification", url: config.NATS_URL });
+const logger = createLogger({
+  level: config.LOG_LEVEL,
+  pretty: config.NODE_ENV === "development",
+  service: "notification",
+});
 
-const server = createApp({ checks: [natsCheck(nc)] }).listen(
-  config.NOTIFICATION_PORT
-);
-onShutdown({ server, tasks: [() => drainNats(nc)] });
+try {
+  const nc = await connectNats({ name: "notification", url: config.NATS_URL });
+  const server = await listen(
+    createApp({ checks: [natsCheck(nc)], logger }),
+    config.NOTIFICATION_PORT
+  );
+  logger.info({ port: config.NOTIFICATION_PORT }, "listening");
+  onShutdown({ logger, server, tasks: [() => drainNats(nc)] });
+} catch (err) {
+  logger.fatal({ err }, "startup failed");
+  process.exit(1);
+}

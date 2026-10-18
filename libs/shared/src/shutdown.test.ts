@@ -1,6 +1,29 @@
+import { Writable } from "node:stream";
+import { createLogger, type Logger } from "./logger.js";
 import { type ClosableServer, createShutdown } from "./shutdown.js";
 
-function setup(options: { closeError?: Error; failTask?: string } = {}) {
+function captureLogger() {
+  const lines: Record<string, unknown>[] = [];
+  const destination = new Writable({
+    write(chunk, _encoding, callback) {
+      for (const line of chunk.toString().split("\n").filter(Boolean)) {
+        lines.push(JSON.parse(line));
+      }
+      callback();
+    },
+  });
+  const logger = createLogger({
+    destination,
+    level: "info",
+    pretty: false,
+    service: "test",
+  });
+  return { lines, logger };
+}
+
+function setup(
+  options: { closeError?: Error; failTask?: string; logger?: Logger } = {}
+) {
   const calls: string[] = [];
   const server: ClosableServer = {
     close(callback) {
@@ -17,6 +40,7 @@ function setup(options: { closeError?: Error; failTask?: string } = {}) {
     }
   };
   const shutdown = createShutdown({
+    logger: options.logger,
     server,
     tasks: [task("first"), task("second"), task("third")],
   });
@@ -54,5 +78,33 @@ describe("createShutdown", () => {
   it("works without tasks", async () => {
     const server: ClosableServer = { close: (callback) => callback() };
     await expect(createShutdown({ server })()).resolves.toBe(0);
+  });
+
+  it("logs a failing task with its index and error", async () => {
+    const { lines, logger } = captureLogger();
+    const { shutdown } = setup({ failTask: "second", logger });
+    await shutdown();
+    expect(lines.map((line) => line.msg)).toEqual([
+      "shutdown started",
+      "shutdown task failed",
+      "shutdown finished",
+    ]);
+    expect(lines[1]).toMatchObject({
+      err: { message: "second failed" },
+      level: 50,
+      task: 1,
+    });
+    expect(lines[2]).toMatchObject({ exitCode: 1 });
+  });
+
+  it("logs a failed server close", async () => {
+    const { lines, logger } = captureLogger();
+    const { shutdown } = setup({ closeError: new Error("busy"), logger });
+    await shutdown();
+    expect(lines[1]).toMatchObject({
+      err: { message: "busy" },
+      level: 50,
+      msg: "closing the HTTP server failed",
+    });
   });
 });

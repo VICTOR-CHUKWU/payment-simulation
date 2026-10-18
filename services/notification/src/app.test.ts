@@ -1,6 +1,12 @@
-import type { ReadinessCheck } from "@payment-be/shared";
+import { createLogger, type ReadinessCheck } from "@payment-be/shared";
 import request from "supertest";
 import { createApp } from "./app.js";
+
+const logger = createLogger({
+  level: "silent",
+  pretty: false,
+  service: "test",
+});
 
 const check = (ok: boolean): ReadinessCheck => ({
   check: () => ok,
@@ -9,13 +15,22 @@ const check = (ok: boolean): ReadinessCheck => ({
 
 describe("notification app", () => {
   it("reports live", async () => {
-    const res = await request(createApp({ checks: [] })).get("/health/live");
+    const res = await request(createApp({ checks: [], logger })).get(
+      "/health/live"
+    );
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: "ok" });
   });
 
+  it("sets an x-request-id on responses", async () => {
+    const res = await request(createApp({ checks: [], logger })).get(
+      "/health/live"
+    );
+    expect(res.headers["x-request-id"]).toEqual(expect.any(String));
+  });
+
   it("is ready when checks pass", async () => {
-    const res = await request(createApp({ checks: [check(true)] })).get(
+    const res = await request(createApp({ checks: [check(true)], logger })).get(
       "/health/ready"
     );
     expect(res.status).toBe(200);
@@ -23,15 +38,15 @@ describe("notification app", () => {
   });
 
   it("is not ready when a check fails", async () => {
-    const res = await request(createApp({ checks: [check(false)] })).get(
-      "/health/ready"
-    );
+    const res = await request(
+      createApp({ checks: [check(false)], logger })
+    ).get("/health/ready");
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ checks: { dep: "fail" }, status: "fail" });
   });
 
   it("returns 404 for an unknown path", async () => {
-    const res = await request(createApp({ checks: [] })).get("/nope");
+    const res = await request(createApp({ checks: [], logger })).get("/nope");
     expect(res.status).toBe(404);
   });
 });

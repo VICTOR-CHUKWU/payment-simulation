@@ -1,7 +1,9 @@
 import {
   baseConfigSchema,
   connectNats,
+  createLogger,
   drainNats,
+  listen,
   loadConfig,
   natsCheck,
   onShutdown,
@@ -15,9 +17,21 @@ const config = loadConfig(
   })
 );
 
-const nc = await connectNats({ name: "payment", url: config.NATS_URL });
+const logger = createLogger({
+  level: config.LOG_LEVEL,
+  pretty: config.NODE_ENV === "development",
+  service: "payment",
+});
 
-const server = createApp({ checks: [natsCheck(nc)] }).listen(
-  config.PAYMENT_PORT
-);
-onShutdown({ server, tasks: [() => drainNats(nc)] });
+try {
+  const nc = await connectNats({ name: "payment", url: config.NATS_URL });
+  const server = await listen(
+    createApp({ checks: [natsCheck(nc)], logger }),
+    config.PAYMENT_PORT
+  );
+  logger.info({ port: config.PAYMENT_PORT }, "listening");
+  onShutdown({ logger, server, tasks: [() => drainNats(nc)] });
+} catch (err) {
+  logger.fatal({ err }, "startup failed");
+  process.exit(1);
+}

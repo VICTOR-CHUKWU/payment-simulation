@@ -1,4 +1,10 @@
-import { baseConfigSchema, loadConfig, onShutdown } from "@payment-be/shared";
+import {
+  baseConfigSchema,
+  createLogger,
+  listen,
+  loadConfig,
+  onShutdown,
+} from "@payment-be/shared";
 import { z } from "zod";
 import { createApp } from "./app.js";
 
@@ -8,5 +14,20 @@ const config = loadConfig(
   })
 );
 
-const server = createApp({ checks: [] }).listen(config.AUTH_PORT);
-onShutdown({ server });
+const logger = createLogger({
+  level: config.LOG_LEVEL,
+  pretty: config.NODE_ENV === "development",
+  service: "auth",
+});
+
+try {
+  const server = await listen(
+    createApp({ checks: [], logger }),
+    config.AUTH_PORT
+  );
+  logger.info({ port: config.AUTH_PORT }, "listening");
+  onShutdown({ logger, server });
+} catch (err) {
+  logger.fatal({ err }, "startup failed");
+  process.exit(1);
+}
