@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. Payment and notification endpoints are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments and serves `POST /payments`. Other payment endpoints and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -71,7 +71,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification), closes its storage (auth) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification), closes its storage (auth and payment) and exits.
 
 ### Health checks
 
@@ -81,7 +81,7 @@ A service stops at startup with a clear error if an environment variable is inva
 | payment | 3002 | `/health/live` | `/health/ready` |
 | notification | 3003 | `/health/live` | `/health/ready` |
 
-Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, which fails if its data file can no longer be written.
+Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, and `payment` reports `nats` and `storage`; `storage` fails if the data file can no longer be written.
 
 ```sh
 curl -i localhost:3002/health/ready
@@ -89,7 +89,7 @@ curl -i localhost:3002/health/ready
 
 ### Storage and demo accounts
 
-Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. Only `auth` stores data so far.
+Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. `auth` stores users in `services/auth/data/users.json` and `payment` stores payments in `services/payment/data/payments.json`.
 
 On every start, `auth` creates these accounts if their emails are not stored yet. An existing account is never changed, so a password you change stays changed.
 
@@ -176,6 +176,31 @@ curl -i -X POST localhost:3001/auth/register \
 curl -s -X POST localhost:3001/auth/login \
   -H 'content-type: application/json' \
   -d '{"email":"admin@example.com","password":"Admin123!"}'
+```
+
+### Payment endpoints
+
+Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a token from `POST /auth/login`.
+
+| Method | Path | Body | Success | Errors |
+|---|---|---|---|---|
+| `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `{ id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }` | `400`, `401`, `413`, `415` |
+
+- `amount` is a positive integer in minor units (kobo, cents), so `150000` in `NGN` is ₦1,500.00. Decimals are rejected.
+- `currency` is one of `NGN`, `USD`, `EUR` or `GBP`. `description` is optional, 1 to 140 characters.
+- The owner (`userId`, `email`) comes from the access token. Any other field in the body, such as `status` or `userId`, is rejected with `400`. Any logged-in user, admin included, can create a payment.
+- A new payment is `pending`. The token is checked before the body is read, so a request without a valid token gets `401` whatever its body.
+- Request bodies must be JSON (`Content-Type: application/json`) and at most 16 kB.
+
+```sh
+TOKEN=$(curl -s -X POST localhost:3001/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"user@example.com","password":"User123!"}' | jq -r .accessToken)
+
+curl -i -X POST localhost:3002/payments \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"amount":150000,"currency":"NGN","description":"Order #42"}'
 ```
 
 ### Errors
