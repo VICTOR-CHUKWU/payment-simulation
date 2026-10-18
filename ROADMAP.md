@@ -35,7 +35,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 |---|---|---|---|
 | BE-01-01 | Monorepo scaffold (pnpm workspaces, TS project refs, root `dev` script starting all services, Biome with `noConsole` as an error, `.env.example`) | done | [tasks/BE-01-01-monorepo-scaffold.md](tasks/BE-01-01-monorepo-scaffold.md) |
 | BE-01-03 | Local infra via docker-compose (NATS JetStream, Mailpit), wrapped in root pnpm scripts (`infra:up`, `infra:down`, `infra:logs`, `infra:reset`) | done | [tasks/BE-01-03-local-infra.md](tasks/BE-01-03-local-infra.md) |
-| BE-01-02 | Shared lib package (config loader, event contracts, NATS client wrapper) | todo | — |
+| BE-01-02 | Shared lib package (config loader, event contracts, NATS client wrapper) | done | [tasks/BE-01-02-shared-lib.md](tasks/BE-01-02-shared-lib.md) |
 | BE-01-04 | Express app skeleton per service: liveness, readiness based on each service's real dependencies, graceful shutdown (drain NATS, stop timers) | todo | — |
 | BE-01-05 | Structured logging with redaction and request/correlation-ID middleware (shared lib) | todo | — |
 | BE-01-06 | Central error model and error-handling middleware (shared lib) | todo | — |

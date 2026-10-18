@@ -8,5 +8,10 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "@nats-io/jetstream": "3.4.0",
+    "@nats-io/transport-node": "3.4.0",
+    "zod": "4.6.7"
   }
 }
