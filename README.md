@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold and local infrastructure (NATS, Mailpit) are in place; no service features are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place; no service features are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -53,6 +53,8 @@ cp .env.example .env
 pnpm infra:up
 pnpm dev
 ```
+
+`.env.example` lists the environment variables, each with a value that works locally.
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
