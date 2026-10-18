@@ -127,6 +127,45 @@ pnpm test        # Jest
 
 Not available yet. Each service will serve Swagger UI, and endpoints will be summarised here.
 
+### Errors
+
+Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457), with content type `application/problem+json` and `Cache-Control: no-store`. Unknown paths get a `404` in this format too. The one exception is `/health/ready`, whose `503` keeps its own `{ checks, status }` body.
+
+```json
+{
+  "type": "tag:payment-be,2026:validation-error",
+  "title": "Validation failed",
+  "status": 400,
+  "detail": "The request is invalid.",
+  "instance": "/payments",
+  "code": "validation-error",
+  "requestId": "abc-123",
+  "errors": [
+    { "pointer": "/amount", "detail": "Too small: expected number to be >0", "code": "too_small" }
+  ]
+}
+```
+
+- `code` is a stable string to branch on. `type` is `about:blank` when the HTTP status says it all, and a `tag:payment-be,2026:<code>` URI for errors specific to this service.
+- `requestId` matches the `x-request-id` response header and the `correlationId` in the logs, so quote it when reporting a problem.
+- `instance` is the request path, without the query string.
+- `errors` appears only on validation errors. Each entry points at the invalid field with a [JSON Pointer](https://www.rfc-editor.org/rfc/rfc6901).
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `validation-error` | The request does not match its schema |
+| 400 | `malformed-json` | The request body is not valid JSON |
+| 400–499 | the status name in kebab case, for example `not-found` | Other client errors |
+| 413 | `payload-too-large` | The request body is too large |
+| 415 | `unsupported-media-type` | The body's media type, charset or encoding is not supported |
+| 500 | `internal-error` | Anything unexpected |
+
+A `500` response never includes the error message, stack or request body. The real error is logged once, on the request's log line, with its `correlationId`.
+
+```sh
+curl -i localhost:3002/nope
+```
+
 ## Testing
 
 Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. This section will grow to cover API and cross-service integration tests.

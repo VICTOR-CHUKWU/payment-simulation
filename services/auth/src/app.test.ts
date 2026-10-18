@@ -2,6 +2,8 @@ import { createLogger, type ReadinessCheck } from "@payment-be/shared";
 import request from "supertest";
 import { createApp } from "./app.js";
 
+const PROBLEM_JSON = /^application\/problem\+json/;
+
 const logger = createLogger({
   level: "silent",
   pretty: false,
@@ -48,5 +50,7 @@ describe("auth app", () => {
   it("returns 404 for an unknown path", async () => {
     const res = await request(createApp({ checks: [], logger })).get("/nope");
     expect(res.status).toBe(404);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("not-found");
   });
 });

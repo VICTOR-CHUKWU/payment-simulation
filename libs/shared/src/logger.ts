@@ -62,7 +62,7 @@ function requestId(req: IncomingMessage, res: ServerResponse): string {
 }
 
 function logLevel(_req: IncomingMessage, res: ServerResponse, err?: Error) {
-  if (err || res.statusCode >= 500) {
+  if (err || res.err || res.statusCode >= 500) {
     return "error";
   }
   if (res.statusCode >= 400) {
