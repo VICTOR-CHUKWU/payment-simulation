@@ -184,13 +184,14 @@ Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a toke
 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `{ id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }` | `400`, `401`, `413`, `415` |
+| `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `{ id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }`, or `200` with the existing payment on an idempotent replay | `400`, `401`, `413`, `415`, `422` |
 
 - `amount` is a positive integer in minor units (kobo, cents), so `150000` in `NGN` is ₦1,500.00. Decimals are rejected.
 - `currency` is one of `NGN`, `USD`, `EUR` or `GBP`. `description` is optional, 1 to 140 characters.
 - The owner (`userId`, `email`) comes from the access token. Any other field in the body, such as `status` or `userId`, is rejected with `400`. Any logged-in user, admin included, can create a payment.
 - A new payment is `pending`. The token is checked before the body is read, so a request without a valid token gets `401` whatever its body.
 - Request bodies must be JSON (`Content-Type: application/json`) and at most 16 kB.
+- An optional `Idempotency-Key` header (1 to 255 printable ASCII characters, no spaces) makes retries safe. Keys are scoped to the caller and never expire. Repeating a request with the same key and body returns `200` with the existing payment in its current state, without creating another. Reusing the key with a different `amount`, `currency` or `description` returns `422 idempotency-key-reused`. Sending the header more than once returns `400`. Without the header, every request creates a new payment.
 
 ```sh
 TOKEN=$(curl -s -X POST localhost:3001/auth/login \
@@ -200,6 +201,7 @@ TOKEN=$(curl -s -X POST localhost:3001/auth/login \
 curl -i -X POST localhost:3002/payments \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
+  -H 'idempotency-key: order-42' \
   -d '{"amount":150000,"currency":"NGN","description":"Order #42"}'
 ```
 

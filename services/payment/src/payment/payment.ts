@@ -31,6 +31,12 @@ export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
 
 export const failureReasonSchema = z.string().min(1).max(200);
 
+export const idempotencyKeySchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .regex(/^[!-~]*$/, "Must be printable ASCII without spaces");
+
 export const paymentFieldsSchema = z.object({
   amount: amountSchema,
   createdAt: z.iso.datetime(),
@@ -39,6 +45,7 @@ export const paymentFieldsSchema = z.object({
   email: z.email(),
   failureReason: failureReasonSchema.optional(),
   id: z.uuid(),
+  idempotencyKey: idempotencyKeySchema.optional(),
   status: paymentStatusSchema,
   updatedAt: z.iso.datetime(),
   userId: z.uuid(),

@@ -55,6 +55,11 @@ describe("paymentSchema", () => {
     expect(paymentSchema.parse(payment)).toEqual(payment);
   });
 
+  it("accepts a payment with an idempotency key", () => {
+    const payment = { ...valid, idempotencyKey: "order-42" };
+    expect(paymentSchema.parse(payment)).toEqual(payment);
+  });
+
   it("accepts a payment without a description", () => {
     const { description: _description, ...payment } = valid;
     expect(paymentSchema.parse(payment)).toEqual(payment);
@@ -76,6 +81,9 @@ describe("paymentSchema", () => {
     ["a 141-character description", { description: "x".repeat(141) }],
     ["a non-ISO updatedAt", { updatedAt: "yesterday" }],
     ["a zero version", { version: 0 }],
+    ["an empty idempotency key", { idempotencyKey: "" }],
+    ["a 256-character idempotency key", { idempotencyKey: "k".repeat(256) }],
+    ["an idempotency key with a space", { idempotencyKey: "a b" }],
     ["a failed payment without a reason", { status: "failed" }],
     [
       "a reason on a succeeded payment",
