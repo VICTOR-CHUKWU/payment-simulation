@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { paymentFieldsSchema } from "./payment.js";
+import { idempotencyKeySchema, paymentFieldsSchema } from "./payment.js";
 
 export const createPaymentBodySchema = z
   .strictObject(
@@ -13,8 +13,12 @@ export const createPaymentBodySchema = z
 
 export type CreatePaymentBody = z.infer<typeof createPaymentBodySchema>;
 
+export const idempotencyKeyHeaderSchema = z.object({
+  "idempotency-key": idempotencyKeySchema.optional(),
+});
+
 export const paymentResponseSchema = paymentFieldsSchema
-  .omit({ version: true })
+  .omit({ idempotencyKey: true, version: true })
   .meta({ id: "Payment" });
 
 export type PaymentResponse = z.infer<typeof paymentResponseSchema>;

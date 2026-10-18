@@ -9,6 +9,7 @@ export {
   type Currency,
   currencySchema,
   failureReasonSchema,
+  idempotencyKeySchema,
   type Payment,
   type PaymentStatus,
   paymentFieldsSchema,
@@ -20,10 +21,13 @@ export { paymentRouter } from "./payment.routes.js";
 export {
   type CreatePaymentBody,
   createPaymentBodySchema,
+  idempotencyKeyHeaderSchema,
   type PaymentResponse,
   paymentResponseSchema,
 } from "./payment.schema.js";
 export {
+  type CreatePaymentInput,
+  type CreatePaymentResult,
   createPaymentService,
   type PaymentOwner,
   type PaymentService,

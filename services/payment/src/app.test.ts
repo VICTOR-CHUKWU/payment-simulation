@@ -86,11 +86,20 @@ describe("payment app", () => {
     const operation = res.body.paths["/payments"].post;
     expect(operation.security).toEqual([{ bearerAuth: [] }]);
     expect(Object.keys(operation.responses).sort()).toEqual([
+      "200",
       "201",
       "400",
       "401",
       "413",
       "415",
+      "422",
+    ]);
+    expect(operation.parameters).toEqual([
+      expect.objectContaining({
+        in: "header",
+        name: "Idempotency-Key",
+        required: false,
+      }),
     ]);
   });
 

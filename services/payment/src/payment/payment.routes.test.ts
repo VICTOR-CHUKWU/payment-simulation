@@ -12,6 +12,7 @@ import type { Payment } from "./index.js";
 
 const SECRET = "s".repeat(32);
 const PROBLEM_JSON = /^application\/problem\+json/;
+const KEY_REUSED_TYPE = /idempotency-key-reused$/;
 
 const owner = {
   email: "ada@example.com",
@@ -165,6 +166,7 @@ describe("POST /payments", () => {
     ["a status", { status: "succeeded" }],
     ["a userId", { userId: randomUUID() }],
     ["an email", { email: "eve@example.com" }],
+    ["an idempotencyKey", { idempotencyKey: "order-42" }],
   ])("returns 400 for %s", async (_label, override) => {
     const { app, payments } = setup();
 
@@ -226,5 +228,106 @@ describe("POST /payments", () => {
 
     expect(res.status).toBe(415);
     expect(res.body.code).toBe("unsupported-media-type");
+  });
+});
+
+describe("POST /payments with an Idempotency-Key", () => {
+  const key = "order-42";
+
+  async function createWithKey(
+    app: ReturnType<typeof setup>["app"],
+    body: unknown,
+    idempotencyKey: string,
+    token: string
+  ) {
+    return await request(app)
+      .post("/payments")
+      .set("authorization", `Bearer ${token}`)
+      .set("idempotency-key", idempotencyKey)
+      .send(body as object);
+  }
+
+  it("returns 201 and then 200 with the same payment", async () => {
+    const { app, payments, raw } = setup();
+    const token = await sign();
+
+    const first = await createWithKey(app, valid, key, token);
+    const second = await createWithKey(app, valid, key, token);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual(first.body);
+    expect(first.body).not.toHaveProperty("idempotencyKey");
+    expect(second.body).not.toHaveProperty("idempotencyKey");
+    expect(await payments.find()).toHaveLength(1);
+    const messages = raw.map((entry) => JSON.parse(entry).msg);
+    expect(messages).toContain("payment create replayed");
+  });
+
+  it("returns 422 when the key is reused with a different body", async () => {
+    const { app, payments } = setup();
+    const token = await sign();
+    await createWithKey(app, valid, key, token);
+
+    const res = await createWithKey(app, { ...valid, amount: 1 }, key, token);
+
+    expect(res.status).toBe(422);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("idempotency-key-reused");
+    expect(res.body.type).toMatch(KEY_REUSED_TYPE);
+    expect(await payments.find()).toHaveLength(1);
+  });
+
+  it.each([
+    ["an empty key", ""],
+    ["a 256-character key", "k".repeat(256)],
+    ["a key with a space", "a b"],
+    ["a repeated header, which Node joins", "order-42, order-43"],
+  ])("returns 400 for %s", async (_label, idempotencyKey) => {
+    const { app, payments } = setup();
+
+    const res = await createWithKey(app, valid, idempotencyKey, await sign());
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("validation-error");
+    expect(res.body.errors).toEqual([
+      expect.objectContaining({ pointer: "/idempotency-key" }),
+    ]);
+    expect(await payments.find()).toEqual([]);
+  });
+
+  it("accepts a 255-character key", async () => {
+    const { app } = setup();
+
+    const res = await createWithKey(app, valid, "k".repeat(255), await sign());
+
+    expect(res.status).toBe(201);
+  });
+
+  it("scopes keys to the caller", async () => {
+    const { app } = setup();
+
+    const mine = await createWithKey(app, valid, key, await sign());
+    const theirs = await createWithKey(
+      app,
+      valid,
+      key,
+      await sign({ sub: randomUUID() })
+    );
+
+    expect(theirs.status).toBe(201);
+    expect(theirs.body.id).not.toBe(mine.body.id);
+  });
+
+  it("creates a new payment each time without the header", async () => {
+    const { app, payments } = setup();
+    const token = await sign();
+
+    const first = await create(app, valid, token);
+    const second = await create(app, valid, token);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(await payments.find()).toHaveLength(2);
   });
 });
