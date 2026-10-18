@@ -8,6 +8,7 @@ export {
   resolveJwtSecret,
   roleSchema,
 } from "./auth.js";
+export { authenticate, getAuth, requireRole } from "./auth-middleware.js";
 export { baseConfigSchema, loadConfig } from "./config.js";
 export {
   AppError,
