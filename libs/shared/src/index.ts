@@ -1,6 +1,24 @@
 // biome-ignore lint/performance/noBarrelFile: package entry point
 export { baseConfigSchema, loadConfig } from "./config.js";
 export {
+  AppError,
+  type AppErrorOptions,
+  badRequest,
+  conflict,
+  errorHandler,
+  forbidden,
+  notFound,
+  notFoundHandler,
+  type ProblemDetails,
+  type ProblemFactory,
+  type ProblemFieldError,
+  type ProblemOverrides,
+  problemDetailsSchema,
+  serviceUnavailable,
+  unauthorized,
+  unprocessable,
+} from "./errors.js";
+export {
   createEvent,
   type EventEnvelope,
   eventEnvelopeSchema,

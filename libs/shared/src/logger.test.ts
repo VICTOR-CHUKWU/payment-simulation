@@ -41,6 +41,10 @@ function setup() {
   app.get("/fail", (_req, res) => {
     res.sendStatus(500);
   });
+  app.get("/flagged", (_req, res) => {
+    res.err = new Error("flagged");
+    res.sendStatus(200);
+  });
   app.get("/me", (req, res) => {
     bindLogUser(req, res, { role: "user", userId: "u_1" });
     req.log.info("handler line");
@@ -126,6 +130,7 @@ describe("httpLogger", () => {
     ["/ok", 30],
     ["/nope", 40],
     ["/fail", 50],
+    ["/flagged", 50],
   ])("logs %s at level %d", async (path, level) => {
     const { app, lines } = setup();
     await request(app).get(path);
