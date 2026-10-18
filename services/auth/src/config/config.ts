@@ -1,0 +1,55 @@
+import { baseConfigSchema, storageConfigSchema } from "@payment-be/shared";
+import { z } from "zod";
+import { normalizeEmail } from "../user/index.js";
+
+const SEED_PASSWORD_KEYS = [
+  "SEED_ADMIN_PASSWORD",
+  "SEED_USER_PASSWORD",
+] as const;
+
+// bcrypt ignores everything past 72 bytes, and .max() counts UTF-16 units.
+const seedPassword = z
+  .string()
+  .min(8)
+  .refine((value) => Buffer.byteLength(value, "utf8") <= 72, {
+    message: "Must be at most 72 bytes",
+  })
+  .optional();
+
+export const authConfigSchema = baseConfigSchema
+  .extend(storageConfigSchema.shape)
+  .extend({
+    AUTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
+    SEED_ADMIN_EMAIL: z.email().default("admin@example.com"),
+    SEED_ADMIN_PASSWORD: seedPassword,
+    SEED_USER_EMAIL: z.email().default("user@example.com"),
+    SEED_USER_PASSWORD: seedPassword,
+  })
+  .transform((config, ctx) => {
+    if (config.NODE_ENV === "production") {
+      for (const key of SEED_PASSWORD_KEYS) {
+        if (config[key] === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Required in production",
+            path: [key],
+          });
+        }
+      }
+    }
+    if (
+      normalizeEmail(config.SEED_ADMIN_EMAIL) ===
+      normalizeEmail(config.SEED_USER_EMAIL)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Must differ from SEED_ADMIN_EMAIL",
+        path: ["SEED_USER_EMAIL"],
+      });
+    }
+    return {
+      ...config,
+      SEED_ADMIN_PASSWORD: config.SEED_ADMIN_PASSWORD ?? "Admin123!",
+      SEED_USER_PASSWORD: config.SEED_USER_PASSWORD ?? "User123!",
+    };
+  });

@@ -62,6 +62,7 @@ export {
   type NewRecord,
   RecordNotFoundError,
   type RecordPatch,
+  type RecordWhere,
   type Repository,
   VersionConflictError,
   type Versioned,

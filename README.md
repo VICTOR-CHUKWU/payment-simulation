@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development; no business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users and seeds demo accounts. No business endpoints are implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -54,7 +54,7 @@ pnpm infra:up
 pnpm dev
 ```
 
-`.env.example` lists the environment variables, each with a value that works locally.
+`.env.example` lists the environment variables with values that work locally. The two seed passwords are commented out, because `auth` falls back to demo values outside production (see [Storage and demo accounts](#storage-and-demo-accounts)).
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -65,7 +65,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid or NATS is unreachable. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification), closes its storage (auth) and exits.
 
 ### Health checks
 
@@ -75,11 +75,24 @@ A service stops at startup with a clear error if an environment variable is inva
 | payment | 3002 | `/health/live` | `/health/ready` |
 | notification | 3003 | `/health/live` | `/health/ready` |
 
-Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` has no dependencies, so it is ready whenever it is listening.
+Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, which fails if its data file can no longer be written.
 
 ```sh
 curl -i localhost:3002/health/ready
 ```
+
+### Storage and demo accounts
+
+Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. Only `auth` stores data so far.
+
+On every start, `auth` creates these accounts if their emails are not stored yet. An existing account is never changed, so a password you change stays changed.
+
+| Role | Email | Password |
+|---|---|---|
+| admin | `admin@example.com` | `Admin123!` |
+| user | `user@example.com` | `User123!` |
+
+`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_USER_EMAIL` and `SEED_USER_PASSWORD` override them. Passwords must be 8 to 72 bytes. With `NODE_ENV=production` there are no default passwords: both must be set, or `auth` refuses to start.
 
 ### Logging
 
@@ -111,8 +124,6 @@ pnpm infra:reset   # stop containers and wipe JetStream data
 ```
 
 Mailpit keeps emails in memory, so they are cleared whenever its container stops.
-
-The seeded demo accounts will be added with the milestone that introduces them.
 
 ### Checks
 

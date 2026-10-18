@@ -1,5 +1,7 @@
 import {
   DuplicateRecordError,
+  firstMatch,
+  matchesWhere,
   RecordNotFoundError,
   type Repository,
   VersionConflictError,
@@ -26,6 +28,12 @@ export function createMemoryRepository<T extends Versioned>(): Repository<T> {
           ? copies.filter((record) => predicate(record))
           : copies;
       }),
+
+    findOne: (predicate) =>
+      settle(() => firstMatch(records.values(), predicate)),
+
+    findOneBy: (where) =>
+      settle(() => firstMatch(records.values(), matchesWhere<T>(where))),
 
     get: (id) =>
       settle(() => {

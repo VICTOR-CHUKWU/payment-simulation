@@ -1,18 +1,16 @@
 import {
-  baseConfigSchema,
   createLogger,
   listen,
   loadConfig,
   onShutdown,
+  openRepository,
 } from "@payment-be/shared";
-import { z } from "zod";
 import { createApp } from "./app.js";
+import { authConfigSchema } from "./config/index.js";
+import { seedUsers } from "./seed/index.js";
+import { userSchema } from "./user/index.js";
 
-const config = loadConfig(
-  baseConfigSchema.extend({
-    AUTH_PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
-  })
-);
+const config = loadConfig(authConfigSchema);
 
 const docs = config.NODE_ENV === "development";
 
@@ -23,15 +21,37 @@ const logger = createLogger({
 });
 
 try {
+  const { check, close, repository } = await openRepository({
+    config,
+    logger,
+    name: "users",
+    schema: userSchema,
+  });
+  await seedUsers({
+    accounts: [
+      {
+        email: config.SEED_ADMIN_EMAIL,
+        password: config.SEED_ADMIN_PASSWORD,
+        role: "admin",
+      },
+      {
+        email: config.SEED_USER_EMAIL,
+        password: config.SEED_USER_PASSWORD,
+        role: "user",
+      },
+    ],
+    logger,
+    users: repository,
+  });
   const server = await listen(
-    createApp({ checks: [], docs, logger }),
+    createApp({ checks: [check], docs, logger }),
     config.AUTH_PORT
   );
   logger.info(
     { port: config.AUTH_PORT, ...(docs ? { docs: "/docs" } : {}) },
     "listening"
   );
-  onShutdown({ logger, server });
+  onShutdown({ logger, server, tasks: [close] });
 } catch (err) {
   logger.fatal({ err }, "startup failed");
   process.exit(1);
