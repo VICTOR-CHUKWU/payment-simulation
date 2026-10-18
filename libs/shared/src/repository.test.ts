@@ -131,6 +131,40 @@ describe.each(adapters)("%s", (_name, createRepository) => {
     expect(await pending).toEqual([{ reason: failure, status: "rejected" }]);
   });
 
+  it("finds the first record matching a predicate, or undefined", async () => {
+    await repo.insert(newItem(OTHER_ID));
+    await repo.insert(newItem());
+
+    expect((await repo.findOne((item) => item.name === "first"))?.id).toBe(
+      OTHER_ID
+    );
+    expect(await repo.findOne((item) => item.name === "none")).toBeUndefined();
+  });
+
+  it("finds the first record matching every given field, or undefined", async () => {
+    await repo.insert(newItem(OTHER_ID));
+    await repo.insert({ ...newItem(), note: "x" });
+
+    expect((await repo.findOneBy({ name: "first" }))?.id).toBe(OTHER_ID);
+    expect((await repo.findOneBy({ name: "first", note: "x" }))?.id).toBe(ID);
+    expect(await repo.findOneBy({ name: "first", note: undefined })).toEqual(
+      await repo.get(OTHER_ID)
+    );
+    expect(await repo.findOneBy({ name: "none" })).toBeUndefined();
+  });
+
+  it("rejects instead of throwing when the findOne predicate throws", async () => {
+    await repo.insert(newItem());
+    const failure = new Error("predicate failed");
+    const pending = Promise.allSettled([
+      repo.findOne(() => {
+        throw failure;
+      }),
+    ]);
+
+    expect(await pending).toEqual([{ reason: failure, status: "rejected" }]);
+  });
+
   it("keeps insertion order after an update", async () => {
     await repo.insert(newItem());
     await repo.insert(newItem(OTHER_ID));
@@ -225,6 +259,12 @@ describe.each(adapters)("%s", (_name, createRepository) => {
       item.tags.push("from-predicate");
       return true;
     });
+    (await repo.findOne(() => true))?.tags.push("from-find-one");
+    await repo.findOne((item) => {
+      item.tags.push("from-find-one-predicate");
+      return true;
+    });
+    (await repo.findOneBy({ id: ID }))?.tags.push("from-find-one-by");
 
     expect((await repo.get(ID))?.tags).toEqual(["b"]);
   });

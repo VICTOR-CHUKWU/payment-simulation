@@ -11,8 +11,12 @@ export type RecordPatch<T> = T extends unknown
   ? Partial<Omit<T, "id" | "version">>
   : never;
 
+export type RecordWhere<T> = T extends unknown ? Partial<T> : never;
+
 export interface Repository<T extends Versioned> {
   find: (predicate?: (record: T) => boolean) => Promise<T[]>;
+  findOne: (predicate: (record: T) => boolean) => Promise<T | undefined>;
+  findOneBy: (where: RecordWhere<T>) => Promise<T | undefined>;
   get: (id: string) => Promise<T | undefined>;
   insert: (record: NewRecord<T>) => Promise<T>;
   update: (
@@ -20,6 +24,26 @@ export interface Repository<T extends Versioned> {
     expectedVersion: number,
     patch: RecordPatch<T>
   ) => Promise<T>;
+}
+
+export function firstMatch<T>(
+  records: Iterable<T>,
+  predicate: (record: T) => boolean
+): T | undefined {
+  for (const record of records) {
+    const copy = structuredClone(record);
+    if (predicate(copy)) {
+      return copy;
+    }
+  }
+}
+
+export function matchesWhere<T>(where: Partial<T>): (record: T) => boolean {
+  const entries = Object.entries(where).filter(
+    ([, value]) => value !== undefined
+  );
+  return (record) =>
+    entries.every(([key, value]) => record[key as keyof T] === value);
 }
 
 export class VersionConflictError extends AppError {

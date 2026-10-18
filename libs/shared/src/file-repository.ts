@@ -14,6 +14,8 @@ import type { ReadinessCheck } from "./health.js";
 import type { Logger } from "./logger.js";
 import {
   DuplicateRecordError,
+  firstMatch,
+  matchesWhere,
   RecordNotFoundError,
   type Repository,
   VersionConflictError,
@@ -345,6 +347,11 @@ export async function createFileRepository<T extends Versioned>({
           ? copies.filter((record) => predicate(record))
           : copies;
       }),
+
+    findOne: (predicate) => read(() => firstMatch(records.values(), predicate)),
+
+    findOneBy: (where) =>
+      read(() => firstMatch(records.values(), matchesWhere<T>(where))),
 
     get: (id) =>
       read(() => {
