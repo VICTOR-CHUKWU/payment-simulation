@@ -56,7 +56,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 
 | ID | Milestone | Status | Task doc |
 |---|---|---|---|
-| BE-03-01 | Payment model (owner `userId` + email, minor-unit amount + currency, `version`) and status state machine (allowed transitions) | todo | — |
+| BE-03-01 | Payment model (owner `userId` + email, minor-unit amount + currency, `version`) and status state machine (allowed transitions) | done | [tasks/BE-03-01-payment-model.md](tasks/BE-03-01-payment-model.md) |
 | BE-03-02 | `POST /payments` — create payment with validation | todo | — |
 | BE-03-07 | Idempotency keys on payment creation | todo | — |
 | BE-03-03 | `GET /payments/:id` — retrieve payment | todo | — |

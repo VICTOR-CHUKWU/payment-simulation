@@ -29,9 +29,11 @@ Services communicate through NATS JetStream. Each service owns its data, stored 
 ### Payment flow
 
 1. A logged-in user calls `POST /payments`. The payment is saved as `pending` and a `payment.created` event is published.
-2. The background processor sends the payment to a simulated gateway, which succeeds or fails after a random delay.
+2. The background processor claims the payment by moving it to `processing`, then sends it to a simulated gateway, which succeeds or fails after a random delay.
 3. The payment service records the result and publishes `payment.succeeded` or `payment.failed`.
 4. The notification service creates an in-app notification and sends an email. Failed emails are retried with backoff, and emails that still fail are moved to a dead-letter queue for inspection and replay.
+
+A payment that is still `pending` can be cancelled instead. `succeeded`, `failed` and `cancelled` are final, and any status change outside this flow is rejected with `409 invalid-status-transition`.
 
 ## Tech stack
 
