@@ -21,5 +21,28 @@ services:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
 
+  nats-test:
+    image: nats:2.15.1-alpine
+    profiles: [test]
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "127.0.0.1:4223:4222"
+      - "127.0.0.1:8223:8222"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 5s
+      start_period: 10s
+      start_interval: 1s
+
+  mailpit-test:
+    image: axllent/mailpit:v1.31.6
+    profiles: [test]
+    command: ["--enable-chaos"]
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
+
 volumes:
   nats-data:

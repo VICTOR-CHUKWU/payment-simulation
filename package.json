@@ -11,14 +11,18 @@
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f",
     "infra:reset": "docker compose down -v",
+    "infra:test:down": "docker compose --profile test rm -fsv nats-test mailpit-test",
+    "infra:test:up": "docker compose --profile test up -d --wait nats-test mailpit-test",
     "infra:up": "docker compose up -d --wait",
     "start": "pnpm -r --parallel --filter \"./services/*\" start",
     "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
     "test:coverage": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --coverage",
+    "test:integration": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --config jest.integration.config.js",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@payment-be/shared": "workspace:*",
     "@types/jest": "30.0.0",
     "@types/node": "24.19.2",
     "jest": "30.5.2",
