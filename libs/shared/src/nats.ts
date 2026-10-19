@@ -50,12 +50,24 @@ export function publishEvent<T>(
   });
 }
 
-export function parseEvent<T extends z.ZodType>(
-  msg: { data: Uint8Array; headers?: MsgHdrs },
-  dataSchema: T
-) {
+export interface EventMessage {
+  data: Uint8Array;
+  headers?: Pick<MsgHdrs, "get">;
+}
+
+export function decodeEvent<T extends z.ZodType>(
+  msg: EventMessage,
+  schema: T
+): { correlationId: string | undefined; event: z.output<T> } {
   const json: unknown = JSON.parse(new TextDecoder().decode(msg.data));
-  const event = eventEnvelopeSchema(dataSchema).parse(json);
+  const event = schema.parse(json);
   const correlationId = msg.headers?.get(CORRELATION_ID_HEADER) || undefined;
   return { correlationId, event };
+}
+
+export function parseEvent<T extends z.ZodType>(
+  msg: EventMessage,
+  dataSchema: T
+) {
+  return decodeEvent(msg, eventEnvelopeSchema(dataSchema));
 }

@@ -11,6 +11,20 @@ export {
 export { authenticate, getAuth, requireRole } from "./auth-middleware.js";
 export { baseConfigSchema, loadConfig } from "./config.js";
 export {
+  AckPolicy,
+  type ConsumerDefinition,
+  type ConsumerManager,
+  type ConsumerSource,
+  DeliverPolicy,
+  type EnsureConsumerResult,
+  ensureConsumer,
+  type JsMsg,
+  type MessageStream,
+  type RunningConsumer,
+  type StartConsumerOptions,
+  startConsumer,
+} from "./consumers.js";
+export {
   AppError,
   type AppErrorOptions,
   badRequest,
@@ -54,7 +68,9 @@ export { createMemoryRepository } from "./memory-repository.js";
 export {
   CORRELATION_ID_HEADER,
   connectNats,
+  decodeEvent,
   drainNats,
+  type EventMessage,
   parseEvent,
   publishEvent,
 } from "./nats.js";

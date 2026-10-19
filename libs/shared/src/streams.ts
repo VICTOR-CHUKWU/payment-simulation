@@ -1,12 +1,12 @@
 import {
   DiscardPolicy,
   JetStreamApiCodes,
-  JetStreamApiError,
   RetentionPolicy,
   StorageType,
   type StreamConfig,
 } from "@nats-io/jetstream";
 import { nanos } from "@nats-io/transport-node";
+import { isApiError, matchesConfig } from "./jetstream-helpers.js";
 
 // biome-ignore lint/performance/noBarrelFile: services reach JetStream only through the shared lib
 export {
@@ -40,22 +40,6 @@ export const PAYMENTS_STREAM = {
   subjects: ["payment.>"],
 } as const satisfies StreamDefinition;
 
-const isApiError = (err: unknown, code: number): err is JetStreamApiError =>
-  err instanceof JetStreamApiError && err.code === code;
-
-const sameValue = (a: unknown, b: unknown): boolean =>
-  Array.isArray(a) && Array.isArray(b)
-    ? a.length === b.length && a.every((item, i) => item === b[i])
-    : a === b;
-
-const matches = (
-  current: Partial<StreamConfig>,
-  config: StreamDefinition
-): boolean =>
-  Object.entries(config).every(([key, value]) =>
-    sameValue(current[key as keyof StreamConfig], value)
-  );
-
 async function infoOrAdd(
   jsm: StreamManager,
   config: StreamDefinition
@@ -88,7 +72,7 @@ export async function ensureStream(
   if (current === undefined) {
     return "created";
   }
-  if (matches(current, config)) {
+  if (matchesConfig<StreamConfig>(current, config)) {
     return "unchanged";
   }
   await jsm.streams.update(config.name, config);

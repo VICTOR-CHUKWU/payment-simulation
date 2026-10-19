@@ -8,6 +8,7 @@ import { z } from "zod";
 import { createEvent } from "./events.js";
 import {
   CORRELATION_ID_HEADER,
+  decodeEvent,
   drainNats,
   parseEvent,
   publishEvent,
@@ -93,6 +94,41 @@ describe("parseEvent", () => {
     expect(() =>
       parseEvent({ data: encode(JSON.stringify(event)) }, dataSchema)
     ).toThrow(z.ZodError);
+  });
+});
+
+describe("decodeEvent", () => {
+  const encode = (value: string) => new TextEncoder().encode(value);
+  const schema = z.object({ data: dataSchema, type: z.literal("test.ok") });
+
+  it("validates the whole event with the given schema", () => {
+    const event = { data: { amount: 5 }, type: "test.ok" };
+    expect(
+      decodeEvent(
+        {
+          data: encode(JSON.stringify(event)),
+          headers: { get: () => "req-2" },
+        },
+        schema
+      )
+    ).toEqual({ correlationId: "req-2", event });
+  });
+
+  it("throws when a field outside data does not match", () => {
+    const event = { data: { amount: 5 }, type: "test.other" };
+    expect(() =>
+      decodeEvent({ data: encode(JSON.stringify(event)) }, schema)
+    ).toThrow(z.ZodError);
+  });
+
+  it("treats an empty correlation header as missing", () => {
+    const event = { data: { amount: 5 }, type: "test.ok" };
+    expect(
+      decodeEvent(
+        { data: encode(JSON.stringify(event)), headers: { get: () => "" } },
+        schema
+      ).correlationId
+    ).toBeUndefined();
   });
 });
 
