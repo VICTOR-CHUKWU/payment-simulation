@@ -1,10 +1,10 @@
 import { type OpenAPIRegistry, problemResponses } from "@payment-be/shared";
 import type { z } from "zod";
 import {
-  accessTokenResponseSchema,
+  accessTokenEnvelopeSchema,
   loginBodySchema,
-  publicUserSchema,
   registerBodySchema,
+  userEnvelopeSchema,
 } from "./auth.schema.js";
 
 const json = (schema: z.ZodType) => ({
@@ -21,7 +21,10 @@ export function registerAuthPaths(registry: OpenAPIRegistry): void {
       body: { content: json(registerBodySchema), required: true },
     },
     responses: {
-      201: { content: json(publicUserSchema), description: "Account created" },
+      201: {
+        content: json(userEnvelopeSchema),
+        description: "Account created",
+      },
       ...problemResponses(400, 409, 413, 415),
     },
     summary: "Register",
@@ -37,7 +40,7 @@ export function registerAuthPaths(registry: OpenAPIRegistry): void {
     },
     responses: {
       200: {
-        content: json(accessTokenResponseSchema),
+        content: json(accessTokenEnvelopeSchema),
         description: "Logged in",
       },
       ...problemResponses(400, 401, 413, 415, 429),

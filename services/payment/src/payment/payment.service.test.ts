@@ -199,3 +199,54 @@ describe("createPaymentService.create with an idempotency key", () => {
     expect(next.status).toBe("fulfilled");
   });
 });
+
+describe("createPaymentService.get", () => {
+  async function stored() {
+    const ctx = setup();
+    const { payment } = await ctx.service.create({
+      body,
+      idempotencyKey: "key-1",
+      owner,
+    });
+    return { ...ctx, payment };
+  }
+
+  it("returns the caller's own payment without internal fields", async () => {
+    const { payment, service } = await stored();
+
+    const found = await service.get(payment.id, {
+      role: "user",
+      userId: owner.userId,
+    });
+
+    expect(found).toEqual(payment);
+    expect(found).not.toHaveProperty("version");
+    expect(found).not.toHaveProperty("idempotencyKey");
+  });
+
+  it("returns another user's payment to an admin", async () => {
+    const { payment, service } = await stored();
+
+    const found = await service.get(payment.id, {
+      role: "admin",
+      userId: other.userId,
+    });
+
+    expect(found).toEqual(payment);
+  });
+
+  it.each([
+    ["another user's payment", true],
+    ["an unknown ID", false],
+  ])("throws payment-not-found for %s", async (_label, exists) => {
+    const { payment, service } = await stored();
+    const id = exists ? payment.id : "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+
+    const error = await service
+      .get(id, { role: "user", userId: other.userId })
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({ code: "payment-not-found", status: 404 });
+  });
+});

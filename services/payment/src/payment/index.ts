@@ -23,12 +23,15 @@ export {
   createPaymentBodySchema,
   idempotencyKeyHeaderSchema,
   type PaymentResponse,
+  paymentEnvelopeSchema,
+  paymentIdParamsSchema,
   paymentResponseSchema,
 } from "./payment.schema.js";
 export {
   type CreatePaymentInput,
   type CreatePaymentResult,
   createPaymentService,
+  type PaymentCaller,
   type PaymentOwner,
   type PaymentService,
   toPaymentResponse,

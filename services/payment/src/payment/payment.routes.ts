@@ -13,5 +13,6 @@ export function paymentRouter(
     express.json({ limit: "16kb" }),
     controller.create
   );
+  router.get("/payments/:id", authenticate(jwtSecret), controller.get);
   return router;
 }
