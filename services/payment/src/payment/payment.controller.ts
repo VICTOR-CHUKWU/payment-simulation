@@ -3,11 +3,13 @@ import type { RequestHandler } from "express";
 import {
   createPaymentBodySchema,
   idempotencyKeyHeaderSchema,
+  paymentIdParamsSchema,
 } from "./payment.schema.js";
 import type { PaymentService } from "./payment.service.js";
 
 export interface PaymentController {
   create: RequestHandler;
+  get: RequestHandler;
 }
 
 export function createPaymentController(
@@ -31,6 +33,11 @@ export function createPaymentController(
         replayed ? "payment create replayed" : "payment created"
       );
       res.status(replayed ? 200 : 201).json(payment);
+    },
+    async get(req, res) {
+      const { id } = paymentIdParamsSchema.parse(req.params);
+      const { role, sub } = getAuth(req);
+      res.json(await service.get(id, { role, userId: sub }));
     },
   };
 }

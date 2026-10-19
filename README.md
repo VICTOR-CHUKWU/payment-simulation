@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments and serves `POST /payments`. Other payment endpoints and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments and serves `POST /payments` and `GET /payments/:id`. Other payment endpoints and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -185,6 +185,7 @@ Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a toke
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
 | `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `{ id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }`, or `200` with the existing payment on an idempotent replay | `400`, `401`, `413`, `415`, `422` |
+| `GET` | `/payments/:id` | — | `200` with the payment, in the same shape | `400`, `401`, `404` |
 
 - `amount` is a positive integer in minor units (kobo, cents), so `150000` in `NGN` is ₦1,500.00. Decimals are rejected.
 - `currency` is one of `NGN`, `USD`, `EUR` or `GBP`. `description` is optional, 1 to 140 characters.
@@ -192,6 +193,7 @@ Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a toke
 - A new payment is `pending`. The token is checked before the body is read, so a request without a valid token gets `401` whatever its body.
 - Request bodies must be JSON (`Content-Type: application/json`) and at most 16 kB.
 - An optional `Idempotency-Key` header (1 to 255 printable ASCII characters, no spaces) makes retries safe. Keys are scoped to the caller and never expire. Repeating a request with the same key and body returns `200` with the existing payment in its current state, without creating another. Reusing the key with a different `amount`, `currency` or `description` returns `422 idempotency-key-reused`. Sending the header more than once returns `400`. Without the header, every request creates a new payment.
+- `GET /payments/:id` returns a user's own payments only. Admins can read any payment. Another user's payment returns `404 payment-not-found`, the same as an unknown ID. An ID that is not a UUID returns `400`.
 
 ```sh
 TOKEN=$(curl -s -X POST localhost:3001/auth/login \
@@ -203,6 +205,8 @@ curl -i -X POST localhost:3002/payments \
   -H 'content-type: application/json' \
   -H 'idempotency-key: order-42' \
   -d '{"amount":150000,"currency":"NGN","description":"Order #42"}'
+
+curl -i localhost:3002/payments/<id> -H "authorization: Bearer $TOKEN"
 ```
 
 ### Errors

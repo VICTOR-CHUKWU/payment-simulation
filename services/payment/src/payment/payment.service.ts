@@ -1,10 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { type Repository, unprocessable } from "@payment-be/shared";
+import {
+  notFound,
+  type Repository,
+  type Role,
+  unprocessable,
+} from "@payment-be/shared";
 import type { Payment } from "./payment.js";
 import type { CreatePaymentBody, PaymentResponse } from "./payment.schema.js";
 
 export interface PaymentOwner {
   email: string;
+  userId: string;
+}
+
+export interface PaymentCaller {
+  role: Role;
   userId: string;
 }
 
@@ -21,6 +31,7 @@ export interface CreatePaymentResult {
 
 export interface PaymentService {
   create: (input: CreatePaymentInput) => Promise<CreatePaymentResult>;
+  get: (id: string, caller: PaymentCaller) => Promise<PaymentResponse>;
 }
 
 export function toPaymentResponse({
@@ -89,6 +100,16 @@ export function createPaymentService(
       const result = queue.then(() => createOnce(input));
       queue = result.catch(() => undefined);
       return result;
+    },
+    async get(id, caller) {
+      const payment = await payments.get(id);
+      if (
+        payment === undefined ||
+        (caller.role !== "admin" && payment.userId !== caller.userId)
+      ) {
+        throw notFound("Payment not found.", { code: "payment-not-found" });
+      }
+      return toPaymentResponse(payment);
     },
   };
 }

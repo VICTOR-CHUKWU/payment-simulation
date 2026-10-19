@@ -103,6 +103,21 @@ describe("payment app", () => {
     ]);
   });
 
+  it("documents GET /payments/{id} with bearer auth and its errors", async () => {
+    const res = await request(app({ docs: true })).get("/docs/openapi.json");
+    const operation = res.body.paths["/payments/{id}"].get;
+    expect(operation.security).toEqual([{ bearerAuth: [] }]);
+    expect(Object.keys(operation.responses).sort()).toEqual([
+      "200",
+      "400",
+      "401",
+      "404",
+    ]);
+    expect(operation.parameters).toEqual([
+      expect.objectContaining({ in: "path", name: "id", required: true }),
+    ]);
+  });
+
   it("serves Swagger UI when docs are enabled", async () => {
     const res = await request(app({ docs: true })).get("/docs/");
     expect(res.status).toBe(200);

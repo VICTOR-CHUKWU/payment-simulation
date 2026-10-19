@@ -59,9 +59,9 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-03-01 | Payment model (owner `userId` + email, minor-unit amount + currency, `version`) and status state machine (allowed transitions) | done | [tasks/BE-03-01-payment-model.md](tasks/BE-03-01-payment-model.md) |
 | BE-03-02 | `POST /payments` — create payment with validation | done | [tasks/BE-03-02-create-payment.md](tasks/BE-03-02-create-payment.md) |
 | BE-03-07 | Idempotency keys on payment creation | done | [tasks/BE-03-07-idempotency-keys.md](tasks/BE-03-07-idempotency-keys.md) |
-| BE-03-03 | `GET /payments/:id` — retrieve payment | todo | — |
+| BE-03-03 | `GET /payments/:id` — retrieve payment | done | [tasks/BE-03-03-get-payment.md](tasks/BE-03-03-get-payment.md) |
 | BE-03-04 | `PATCH /payments/:id/status` — update status, enforcing transitions atomically | todo | — |
-| BE-03-06 | Payment ownership checks (users see only their own payments; status PATCH is admin-only) | todo | — |
+| BE-03-06 | Payment status PATCH is admin-only (read ownership shipped in BE-03-03) | todo | — |
 | BE-03-05 | Simulated gateway and background processor (delay, random failure, timeouts, resumes in-flight payments after restart) | todo | — |
 
 ## Phase 4 — Messaging (NATS)
@@ -120,4 +120,4 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | Swagger or Markdown API docs | BE-01-09, BE-06-04, BE-06-05 |
 | Git repo + README with setup, API, testing instructions | BE-06-05, BE-06-07 |
 | Clear instructions to run locally | BE-01-01, BE-06-05, BE-06-07 |
-| Users and ownership (added) | BE-02-01 – BE-02-04, BE-03-06, BE-05-03 |
+| Users and ownership (added) | BE-02-01 – BE-02-04, BE-03-03, BE-03-06, BE-05-03 |

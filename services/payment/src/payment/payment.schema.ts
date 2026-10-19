@@ -17,6 +17,8 @@ export const idempotencyKeyHeaderSchema = z.object({
   "idempotency-key": idempotencyKeySchema.optional(),
 });
 
+export const paymentIdParamsSchema = z.object({ id: z.uuid() });
+
 export const paymentResponseSchema = paymentFieldsSchema
   .omit({ idempotencyKey: true, version: true })
   .meta({ id: "Payment" });
