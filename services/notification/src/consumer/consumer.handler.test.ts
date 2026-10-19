@@ -20,6 +20,7 @@ import {
   type ConsumerMessage,
   createEventHandler,
   type EventHandlerOptions,
+  NAK_DELAY_MS,
 } from "./consumer.handler.js";
 
 const EMAIL = "ada@example.com";
@@ -35,6 +36,7 @@ const data = (type: PaymentEventType) => ({
 
 function stubMessage(body: unknown, correlationId?: string) {
   const actions: string[] = [];
+  const nakDelays: (number | undefined)[] = [];
   const msg: ConsumerMessage = {
     ack: () => actions.push("ack"),
     data: new TextEncoder().encode(
@@ -44,12 +46,15 @@ function stubMessage(body: unknown, correlationId?: string) {
       get: (key) =>
         key === CORRELATION_ID_HEADER && correlationId ? correlationId : "",
     },
-    nak: () => actions.push("nak"),
+    nak: (delayMs) => {
+      actions.push("nak");
+      nakDelays.push(delayMs);
+    },
     seq: 7,
     subject: "payment.created",
     term: () => actions.push("term"),
   };
-  return { actions, msg };
+  return { actions, msg, nakDelays };
 }
 
 type Inbox = EventHandlerOptions["inbox"];
@@ -278,6 +283,7 @@ describe("per-channel dedupe", () => {
     const first = stubMessage(event);
     await handle(first.msg);
     expect(first.actions).toEqual(["nak"]);
+    expect(first.nakDelays).toEqual([NAK_DELAY_MS]);
     expect(await inbox.get(`inapp:${event.eventId}`)).toBeUndefined();
     const second = stubMessage(event);
     await handle(second.msg);
@@ -327,10 +333,11 @@ describe("per-channel dedupe", () => {
       get: () => Promise.reject(new Error("storage closed")),
     });
     const { handle, lines } = setup(onEvent, inbox);
-    const { actions, msg } = stubMessage(created());
+    const { actions, msg, nakDelays } = stubMessage(created());
     await handle(msg);
     expect(seen).toEqual([]);
     expect(actions).toEqual(["nak"]);
+    expect(nakDelays).toEqual([NAK_DELAY_MS]);
     expect(lines().some((line) => line.msg === "event handling failed")).toBe(
       true
     );

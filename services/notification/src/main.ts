@@ -22,6 +22,7 @@ import {
   consumersCheck,
   createEventHandler,
 } from "./consumer/index.js";
+import { createEmailService, createMailer } from "./email/index.js";
 import { inboxRecordSchema } from "./inbox/index.js";
 import {
   createNotificationService,
@@ -53,6 +54,14 @@ try {
     schema: notificationSchema,
   });
   const service = createNotificationService(notifications.repository);
+  const mailer = createMailer({
+    host: config.SMTP_HOST,
+    port: config.SMTP_PORT,
+  });
+  const emailService = createEmailService({
+    from: config.SMTP_FROM,
+    mailer,
+  });
   // openRepository names every check "storage", and readiness keys checks by name.
   const storage = {
     check: async () => {
@@ -86,9 +95,10 @@ try {
           channel,
           inbox: inbox.repository,
           logger,
-          ...(channel === "inapp"
-            ? { onEvent: (event) => service.record(event) }
-            : {}),
+          onEvent:
+            channel === "inapp"
+              ? (event) => service.record(event)
+              : (event, log) => emailService.send(event, log),
         }),
         js,
         logger,
@@ -118,6 +128,7 @@ try {
       () => drainNats(nc),
       inbox.close,
       notifications.close,
+      mailer.close,
     ],
   });
 } catch (err) {

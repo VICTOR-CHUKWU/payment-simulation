@@ -12,11 +12,13 @@ import { type Channel, type InboxRecord, inboxId } from "../inbox/index.js";
 
 export interface ConsumerMessage extends EventMessage {
   ack: () => void;
-  nak: () => void;
+  nak: (delayMs?: number) => void;
   seq: number;
   subject: string;
   term: (reason?: string) => void;
 }
+
+export const NAK_DELAY_MS = 5000;
 
 export interface EventHandlerOptions {
   channel: Channel;
@@ -75,7 +77,7 @@ export function createEventHandler({
       }
     } catch (err) {
       log.error({ channel, err }, "event handling failed");
-      msg.nak();
+      msg.nak(NAK_DELAY_MS);
       return;
     }
     if (duplicate) {
