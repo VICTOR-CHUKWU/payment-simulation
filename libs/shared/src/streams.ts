@@ -40,6 +40,17 @@ export const PAYMENTS_STREAM = {
   subjects: ["payment.>"],
 } as const satisfies StreamDefinition;
 
+export const DLQ_STREAM = {
+  discard: DiscardPolicy.Old,
+  duplicate_window: nanos(2 * 60 * 1000),
+  max_age: nanos(30 * 24 * 60 * 60 * 1000),
+  name: "DLQ",
+  num_replicas: 1,
+  retention: RetentionPolicy.Limits,
+  storage: StorageType.File,
+  subjects: ["dlq.>"],
+} as const satisfies StreamDefinition;
+
 async function infoOrAdd(
   jsm: StreamManager,
   config: StreamDefinition

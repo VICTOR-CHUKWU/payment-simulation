@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. It also emails the payment's owner when a payment is received, succeeds, fails or is cancelled, through SMTP (Mailpit locally). Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. It also emails the payment's owner when a payment is received, succeeds, fails or is cancelled, through SMTP (Mailpit locally), retrying failed sends with growing delays and moving emails that still fail to a dead-letter queue that admins can inspect and replay. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -71,7 +71,7 @@ How the notification service consumes:
 - A consumer created for the first time reads from the start of the stream, so events published before `notification` first started are not lost. After that, each consumer continues from its last ack.
 - Each message is checked against the event schema. A valid event is logged, handled and acked; one the channel has already processed is acked without being handled again. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered after 5 seconds.
 - Each channel records an event as processed (in its inbox) only after its work succeeds, and skips it on any later delivery, such as a redelivery, a replay from a recreated consumer or a late outbox republish. The two channels track this separately, so one channel's record never hides an event from the other. Handling is at least once: if the service stops after the work but before the record is saved, the event is handled again.
-- The in-app handler stores a notification for every event except `payment.processing`, which follows `payment.created` within milliseconds. Each notification is keyed by the event's `eventId`, so an event handled again after a crash still leaves one notification. The email handler sends an email for the same four types, to the address carried in the event, with a plain-text and an HTML body. If sending fails (for example while Mailpit is down), the message is redelivered every 5 seconds until it succeeds; bounded retries and a dead-letter queue arrive with BE-05-05 and BE-05-06. If the service stops after sending but before recording the event as processed, the email is sent again with the same `Message-ID`.
+- The in-app handler stores a notification for every event except `payment.processing`, which follows `payment.created` within milliseconds. Each notification is keyed by the event's `eventId`, so an event handled again after a crash still leaves one notification. The email handler sends an email for the same four types, to the address carried in the event, with a plain-text and an HTML body. If sending fails (for example while Mailpit is down), the email is tried up to `EMAIL_MAX_ATTEMPTS` times (5 by default), waiting 5 seconds, 30 seconds, 2 minutes and then 10 minutes between attempts. A permanent rejection (a 5xx SMTP reply, such as an unknown recipient, or an invalid envelope) is not retried. An email that still fails, or is rejected, is published to the `DLQ` stream and its message is acked, so it is never redelivered; an admin can inspect and replay it (see [Admin DLQ endpoints](#admin-dlq-endpoints)). Attempts are counted per delivery, so a redelivery caused by something other than a send (for example the inbox file being unreadable) also uses one. The in-app handler is not bounded: if storing fails, it retries every 5 seconds until it succeeds. If the service stops after sending but before recording the event as processed, the email is sent again with the same `Message-ID`.
 
 ## Tech stack
 
@@ -118,8 +118,10 @@ The notification service sends email with these:
 |---|---|---|
 | `SMTP_HOST`, `SMTP_PORT` | `localhost`, `1025` | SMTP server; the defaults point at Mailpit. No login or TLS is used |
 | `SMTP_FROM` | `Payment Simulation <no-reply@payment-simulation.local>` | Sender of every email |
+| `EMAIL_MAX_ATTEMPTS` | `5` | Send attempts per email before it moves to the dead-letter queue, from `1` to `20` |
+| `EMAIL_RETRY_DELAYS_MS` | `5000,30000,120000,600000` | Comma-separated waits after each failed attempt; the last one repeats if the list is shorter |
 
-`notification` starts and stays ready without Mailpit; emails wait until it is reachable again.
+`notification` starts and stays ready without Mailpit. Emails are retried on the schedule above and then moved to the dead-letter queue. For a quick demo, start with `EMAIL_MAX_ATTEMPTS=3 EMAIL_RETRY_DELAYS_MS=1000,2000 pnpm dev`.
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -130,7 +132,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth`, `payment` and `notification`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. `notification` then does the same for its two consumers and starts reading from them. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. The same applies to a notification consumer whose settings NATS refuses to change, such as its start point. `payment` then publishes any events left waiting from its previous run. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor and then the outbox relay (payment), stops reading from its consumers (notification), drains NATS (payment and notification), closes its storage (auth, payment and notification) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth`, `payment` and `notification`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings, and `notification` does the same for the `DLQ` stream (dead-lettered emails, kept 30 days). `notification` then does the same for its two consumers and starts reading from them. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. The same applies to a notification consumer whose settings NATS refuses to change, such as its start point. `payment` then publishes any events left waiting from its previous run. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor and then the outbox relay (payment), stops reading from its consumers (notification), drains NATS (payment and notification), closes its storage (auth, payment and notification) and exits.
 
 ### Health checks
 
@@ -332,6 +334,31 @@ curl -i -X PATCH localhost:3003/notifications/<id>/read -H "authorization: Beare
 curl -i -X PATCH localhost:3003/notifications/read -H "authorization: Bearer $TOKEN"
 ```
 
+### Admin DLQ endpoints
+
+Emails that could not be sent are kept in the JetStream `DLQ` stream. These endpoints are for admins only: any other caller gets `403`. Each entry is identified by its sequence number in the stream (`seq`).
+
+| Method | Path | Query | Success | Errors |
+|---|---|---|---|---|
+| `GET` | `/admin/dlq` | `page?`, `limit?` | `200` with `data`: entries `{ seq, deadLetteredAt, reason, attempts, code?, responseCode?, command?, event }` newest first, and `meta` | `400`, `401`, `403` |
+| `GET` | `/admin/dlq/:seq` | — | `200` with `data`: one entry | `400`, `401`, `403`, `404` |
+| `POST` | `/admin/dlq/:seq/replay` | — | `200` with `data: { seq, eventId }` and the message `Email sent` | `400`, `401`, `403`, `404`, `409`, `500`, `502` |
+
+- `reason` is `exhausted` when every attempt failed and `rejected` when the SMTP server refused the email permanently. `code`, `responseCode` and `command` describe the last failure, for example `ESOCKET` when the server could not be reached. `event` is the original payment event, including the recipient's address.
+- `page` and `limit` work as in `GET /notifications`. An unknown query parameter returns `400`.
+- Replay sends the email now, inside the request. If it is sent, the entry is deleted. If the SMTP server still refuses it, the request returns `502 email-send-failed` with the error code in `detail`, and the entry stays for another try. Replaying an entry that is already being replayed returns `409 replay-in-progress`.
+- Replay sends the email even though the event is already recorded as processed, so it is the only way a dead-lettered email is sent again.
+
+```sh
+ADMIN_TOKEN=$(curl -s -X POST localhost:3001/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"admin@example.com","password":"Admin123!"}' | jq -r .data.accessToken)
+
+curl -i localhost:3003/admin/dlq -H "authorization: Bearer $ADMIN_TOKEN"
+
+curl -i -X POST localhost:3003/admin/dlq/<seq>/replay -H "authorization: Bearer $ADMIN_TOKEN"
+```
+
 ### Errors
 
 Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457), with content type `application/problem+json` and `Cache-Control: no-store`. Unknown paths get a `404` in this format too. The one exception is `/health/ready`, whose `503` keeps its own `{ checks, status }` body.
@@ -368,10 +395,12 @@ Every error response uses [RFC 9457 Problem Details](https://www.rfc-editor.org/
 | 409 | `email-taken` | Register with an email that already has an account |
 | 409 | `invalid-status-transition` | The payment's current status does not allow the requested status |
 | 409 | `version-conflict` | The resource changed since it was read; fetch it and retry |
+| 409 | `replay-in-progress` | A dead-lettered email is already being replayed |
 | 413 | `payload-too-large` | The request body is too large |
 | 415 | `unsupported-media-type` | The body's media type, charset or encoding is not supported |
 | 429 | `too-many-requests` | Too many failed logins from this IP. The response carries `Retry-After` in seconds |
 | 500 | `internal-error` | Anything unexpected |
+| 502 | `email-send-failed` | Replaying a dead-lettered email failed because the SMTP server refused it; `detail` names the error code |
 
 A `500` response never includes the error message, stack or request body. The real error is logged once, on the request's log line, with its `correlationId`.
 
