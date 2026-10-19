@@ -76,7 +76,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 
 | ID | Milestone | Status | Task doc |
 |---|---|---|---|
-| BE-05-01 | Notification service scaffold with separate durable consumers for in-app and email | todo | — |
+| BE-05-01 | Notification service scaffold with separate durable consumers for in-app and email | done | [tasks/BE-05-01-notification-consumers.md](tasks/BE-05-01-notification-consumers.md) |
 | BE-05-02 | Idempotent event handling, deduped per channel (`eventId` + channel) | todo | — |
 | BE-05-03 | In-app notifications: store, `GET /notifications` (own notifications only), mark as read | todo | — |
 | BE-05-04 | Email channel via SMTP (templates per payment event) | todo | — |
