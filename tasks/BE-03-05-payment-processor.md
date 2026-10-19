@@ -216,5 +216,7 @@ Every Completion Verification check passes, and the BE-03-05 row in `ROADMAP.md`
 
 ## Follow-ups
 
+- Known limitation (recorded 2026-10-19 for the README): marking a timeout `failed` is safe only because the simulated gateway keeps no state and never charges on a call it hangs on. A real gateway timeout means the outcome is unknown; a real system would keep the payment open and retry or query the gateway (the payment ID is the idempotency key) before failing it.
+
 - BE-04-02: `transitionPayment` is the single place status changes happen, so the outbox entry can be written in the same `update` patch. Each processor transition (`processing`, `succeeded`, `failed`) then publishes through it.
 - BE-07-05: the processor's logs map directly to metric counters (claimed, processed by status, timeouts).

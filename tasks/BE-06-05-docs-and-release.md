@@ -1,7 +1,7 @@
 # BE-06-05: Final README, architecture docs and clean-clone release check
 
 **Covers:** BE-06-05, BE-06-06, BE-06-07
-**Status:** todo
+**Status:** done
 
 ## Objective
 
@@ -80,7 +80,7 @@ Options:
   - Replace the status note with a short summary of what the system does.
   - Check every setup and run instruction against the code (scripts in `package.json`, env vars in each `config.ts` and `.env.example`, ports, demo accounts); fix any drift.
   - "Testing": the testing approach as one coherent section: unit tests next to the code, API tests with supertest through `createApp`, the coverage report, the integration suite and what it needs (Docker, test containers), and which command runs what.
-  - A new "Design notes" section: the key decisions and why (service split, events over JetStream, outbox and inbox, background processing, integer money, file-or-memory storage, no cache, email retries and DLQ), each one or two sentences with a link to its task doc or `docs/architecture.md`; plus "Known limitations" per D1.
+  - A new "Design notes" section: the key decisions and why (service split — link to the existing "What was added, and why" section rather than repeating it — events over JetStream, outbox and inbox, background processing, integer money, file-or-memory storage, no cache, email retries and DLQ), each one or two sentences with a link to its task doc or `docs/architecture.md`; plus "Known limitations" per D1.
   - "API": a one-line pointer to each service's Swagger UI and spec as the full reference; the existing endpoint tables stay as the summary.
   - Remove every "will be added", "for now" and "arrives with BE-…" phrase that no longer holds.
 - **Architecture docs (BE-06-06):** `docs/architecture.md` with the diagrams listed under defaults and short prose for each: service responsibilities and data ownership; how a payment moves through the system; the event catalogue (linked); failure handling (outbox relay and ordering, consumer dedupe, at-least-once delivery, email retries and DLQ, readiness and graceful shutdown).
@@ -152,6 +152,12 @@ None.
 ## Completion Criteria
 
 Every Completion Verification check passes, and BE-06-05, BE-06-06 and BE-06-07 in `ROADMAP.md` are `done` and link to this file.
+
+## Delivery notes
+
+- BE-06-03 was not merged when this task ran, so this branch is stacked on `feat/BE-06-03-integration-tests` and its PR targets that branch.
+- Clean clone on 2026-10-19 (branch `feat/BE-06-05-docs-and-release`): the README worked as written, with no fixes needed. The PR description has the log.
+- The double-signal caveat still holds under `pnpm dev`: after one SIGINT to the process group, tsx watch printed "Previous process hasn't exited yet. Force killing..." for every service; only `notification` logged `shutdown finished`. SIGTERM straight to `node dist/main.js` shut all three down cleanly.
 
 ## Follow-ups
 

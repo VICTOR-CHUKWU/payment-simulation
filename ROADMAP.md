@@ -92,9 +92,9 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-06-02 | API test suite completed with supertest (happy paths + error responses for every endpoint) | done | [tasks/BE-06-01-test-and-openapi-gaps.md](tasks/BE-06-01-test-and-openapi-gaps.md) |
 | BE-06-03 | Cross-service integration tests (event flow, retries, DLQ, duplicate delivery) | done | [tasks/BE-06-03-integration-tests.md](tasks/BE-06-03-integration-tests.md) |
 | BE-06-04 | OpenAPI spec reviewed for completeness across all services (examples, error responses, auth) | done | [tasks/BE-06-01-test-and-openapi-gaps.md](tasks/BE-06-01-test-and-openapi-gaps.md) |
-| BE-06-05 | README finalised (setup, run locally, demo accounts, API reference, testing approach, design notes) | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
-| BE-06-06 | Architecture docs (service diagram, event catalogue, failure handling) | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
-| BE-06-07 | Git repository published with run-locally instructions verified from a clean clone | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
+| BE-06-05 | README finalised (setup, run locally, demo accounts, API reference, testing approach, design notes) | done | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
+| BE-06-06 | Architecture docs (service diagram, event catalogue, failure handling) | done | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
+| BE-06-07 | Git repository published with run-locally instructions verified from a clean clone | done | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
 
 ## Phase 7 — Stretch
 
