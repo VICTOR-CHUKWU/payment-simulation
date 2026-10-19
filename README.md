@@ -42,6 +42,22 @@ How the processor behaves:
 - On shutdown the processor stops first and abandons any gateway call still waiting, without recording a result. Those payments stay `processing`. On the next start, and whenever a result could not be saved, they are sent to the gateway again, with the payment ID as the idempotency key a real gateway would use.
 - An admin's `PATCH /payments/:id/status` to `succeeded` or `failed` races the processor for a `processing` payment. Whichever change is saved first wins: the other gets `409 invalid-status-transition` (the admin) or is dropped and logged as `payment already settled` (the processor).
 
+### Events
+
+Payment events go to the JetStream stream `PAYMENTS`, which captures `payment.>`, with one subject per status change. Each event's `type` is also its subject. The payment service starts publishing them in BE-04-02; until then the stream exists but stays empty.
+
+| Type | Emitted when |
+|---|---|
+| `payment.created` | A payment is saved as `pending` |
+| `payment.processing` | The processor claims the payment |
+| `payment.succeeded` | The payment succeeds, through the gateway or an admin |
+| `payment.failed` | The payment fails, through the gateway or an admin |
+| `payment.cancelled` | An admin cancels a `pending` payment |
+
+Every event has the shared envelope (`eventId`, `type`, `occurredAt`, `data`). `data` holds `paymentId`, `userId`, `email`, `amount` (integer minor units), `currency` (ISO 4217 code) and the optional `description`. `payment.failed` also carries `failureReason`. The request's correlation ID travels in the `x-correlation-id` message header.
+
+The stream stores messages on disk for 7 days. JetStream drops a second publish of the same `eventId` within 2 minutes; consumers still handle duplicates themselves.
+
 ## Tech stack
 
 Node.js 24, TypeScript, Express, NATS JetStream, Zod, pino, Jest and supertest, Swagger UI, Biome (Ultracite), pnpm workspaces, docker-compose for local infrastructure (NATS and Mailpit).
@@ -89,7 +105,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor (payment), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor (payment), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
 
 ### Health checks
 

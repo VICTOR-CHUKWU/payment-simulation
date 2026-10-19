@@ -69,7 +69,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 
 | ID | Milestone | Status | Task doc |
 |---|---|---|---|
-| BE-04-01 | JetStream streams, subjects and event catalogue (one subject per status change, e.g. `payment.created`, `payment.succeeded`; final list follows BE-03-01) | todo | — |
+| BE-04-01 | JetStream streams, subjects and event catalogue (one subject per status change, e.g. `payment.created`, `payment.succeeded`; final list follows BE-03-01) | done | [tasks/BE-04-01-event-catalogue.md](tasks/BE-04-01-event-catalogue.md) |
 | BE-04-02 | Payment service publishes lifecycle events (event ID, `userId` + email) through an outbox stored with the payment, republished on startup | todo | — |
 
 ## Phase 5 — Notification Service
