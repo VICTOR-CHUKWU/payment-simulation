@@ -19,7 +19,7 @@ flowchart LR
     processor[Background processor]
     gateway[Simulated gateway]
     relay[Outbox relay]
-    payments[(payments.json<br/>with outbox)]
+    payments[("payments.json<br/>with outbox")]
     payApi --> payments
     processor --> payments
     processor --> gateway
@@ -39,8 +39,8 @@ flowchart LR
   end
 
   subgraph nats["NATS JetStream"]
-    PAYMENTS[[PAYMENTS stream<br/>payment.&gt;]]
-    DLQ[[DLQ stream<br/>dlq.&gt;]]
+    PAYMENTS[["PAYMENTS stream<br/>payment.>"]]
+    DLQ[["DLQ stream<br/>dlq.>"]]
   end
 
   mailpit[(Mailpit SMTP)]
@@ -48,11 +48,11 @@ flowchart LR
   client -- "login → JWT" --> authApi
   client -- "Bearer JWT" --> payApi
   client -- "Bearer JWT" --> notifApi
-  relay -- publish --> PAYMENTS
-  PAYMENTS -- notification-inapp --> inapp
-  PAYMENTS -- notification-email --> email
-  email -- send --> mailpit
-  email -- dead-letter --> DLQ
+  relay -- "publish" --> PAYMENTS
+  PAYMENTS -- "notification-inapp" --> inapp
+  PAYMENTS -- "notification-email" --> email
+  email -- "send" --> mailpit
+  email -- "dead-letter" --> DLQ
   notifApi -- "inspect / replay" --> DLQ
   notifApi -- replay --> mailpit
 ```
@@ -97,18 +97,19 @@ sequenceDiagram
   R->>S: remove sent event from outbox
   W->>S: claim: pending → processing (+ payment.processing)
   W->>G: charge(paymentId)
-  G-->>W: succeeded / failed after a random delay
+  G-->>W: approved or declined after a random delay (or no answer: timeout)
   W->>S: processing → succeeded | failed (+ event)
   R->>J: publish payment.processing, then the result
   J-->>N: deliver to notification-inapp and notification-email
-  N->>N: in-app: store notification (not for payment.processing)
+  Note over N: both channels skip payment.processing
+  N->>N: in-app: store notification
   N->>M: email: send, Message-ID = eventId
   U->>N: GET /notifications
 ```
 
 - A status change and its event are written together in one compare-and-set update, so neither can exist without the other. The relay publishes afterwards.
-- The correlation ID of the `POST /payments` request is stored with each outbox entry and sent in the `x-correlation-id` header, so one ID can be followed from the HTTP request through the processor to both notification channels.
-- An admin can cancel a `pending` payment, or settle a `processing` one, with `PATCH /payments/:id/status`. That change goes through the same compare-and-set update as the processor's, so whichever is saved first wins and the other gets a conflict.
+- Each outbox entry stores a correlation ID, sent in the `x-correlation-id` header. Events from the processor carry the ID of the `POST /payments` request, so one ID can be followed from the HTTP request through the processor to both notification channels. Events from an admin `PATCH` carry that request's own ID.
+- An admin can cancel a `pending` payment, or settle a `processing` one, with `PATCH /payments/:id/status`. That change goes through the same compare-and-set update as the processor's, so whichever is saved first wins: the admin gets `409`, or the processor drops its result and logs `payment already settled`.
 
 The event types and their payload are listed in the README under [Events](../README.md#events).
 
@@ -131,27 +132,28 @@ flowchart TB
     seen -- yes --> skip[Ack, log duplicate skipped]
     seen -- no --> work[Store notification / send email]
     work -- ok --> mark[Record in inbox, ack]
+    work -- "in-app store fails" --> nak5[nak, retry in 5 s] --> deliver
   end
 
   subgraph mail["email failures"]
     work -- "send fails" --> kind{Permanent?<br/>5xx, or envelope error with no reply}
-    kind -- no, attempts left --> nak[nak with the next delay] --> deliver
-    kind -- "yes, or attempts used up" --> dlq[[Publish to DLQ, record, ack]]
+    kind -- "no, attempts left" --> nak[nak with the next delay] --> deliver
+    kind -- "yes, or attempts used up" --> dlq[["Publish to DLQ, record, ack"]]
     dlq --> admin[Admin lists and replays]
     admin -- "SMTP accepts" --> sent[Email sent, entry deleted]
     admin -- "SMTP refuses" --> keep[502, entry kept]
   end
 
-  remove -. JetStream .-> deliver
+  remove -. "JetStream" .-> deliver
 ```
 
 ### Publishing: the outbox
 
-`payment` never publishes inside a request. Each event is saved in the payment record's outbox in the same write as the status change, and the relay publishes it right after, on a timer, and once at startup. If NATS is down, the status change still succeeds and the event waits. One payment's events go out in order: the relay stops at that payment's first failed publish and tries again on the next sweep. Delivery is at least once. If `payment` stops between publishing and removing an event, it is published again with the same `eventId`; JetStream drops the repeat within its 2-minute duplicate window, and consumers ignore it after that. Detail: [BE-04-02](../tasks/BE-04-02-payment-event-outbox.md).
+`payment` never publishes inside a request. Each event is saved in the payment's outbox in the same write as the status change, and a relay publishes it afterwards. A NATS outage therefore never fails a request or loses an event: the event waits for the next sweep. One payment's events go out in order, and delivery is at least once, with JetStream's duplicate window catching quick repeats. The README's [Events](../README.md#events) section has the exact rules. Detail: [BE-04-02](../tasks/BE-04-02-payment-event-outbox.md).
 
 ### Consuming: at-least-once delivery and the inbox
 
-`notification` has two durable pull consumers on `PAYMENTS`, one per channel, each with explicit acks. JetStream may deliver a message more than once (a redelivery after a missed ack, a consumer recreated from the start, a late outbox republish), so each channel keeps an inbox keyed by `eventId` + channel. An event is recorded only after its work succeeds, and skipped on any later delivery. Keying by channel means an email retry is never hidden by the in-app notification having been stored already. A message that is not valid JSON or fails the schema is terminated, so it never loops. In-app notifications also use the `eventId` as their ID, so handling an event twice after a crash still leaves one notification. Detail: [BE-05-02](../tasks/BE-05-02-idempotent-event-handling.md).
+JetStream may deliver a message more than once, so each notification channel keeps an inbox keyed by `eventId` + channel and skips an event it has already handled. Keying by channel means an email retry is never hidden by the in-app notification having been stored already. An event is recorded only after its work succeeds, so a crash between the work and the record repeats the work: in-app notifications use the `eventId` as their ID, so that still leaves one notification, but the email is sent again (with the same `Message-ID`). A message that is not valid JSON or fails the schema is terminated, so it never loops. The README's [Events](../README.md#events) section has the exact rules. Detail: [BE-05-02](../tasks/BE-05-02-idempotent-event-handling.md).
 
 ### Email retries and the dead-letter queue
 
@@ -159,8 +161,8 @@ JetStream has no built-in dead-letter stream, so the email handler runs its own.
 
 ### Concurrent updates
 
-Every repository update is compare-and-set on a `version` field. The processor and an admin `PATCH` can race for the same payment; the loser re-reads, re-checks the transition and either retries (up to 3 times) or gets `409`. The JSON-file adapter writes through a temporary file and a rename, with one writer per file, so a crash never leaves a half-written file. Detail: [BE-01-07](../tasks/BE-01-07-repository-interface.md), [BE-01-08](../tasks/BE-01-08-json-file-adapter.md).
+Every repository update is compare-and-set on a `version` field. The processor and an admin `PATCH` can race for the same payment. A write that loses re-reads the payment and re-checks the transition, up to 3 attempts in total; if the payment has moved on, the admin gets `409` and the processor logs `payment already settled`. The JSON-file adapter writes through a temporary file and a rename, with one writer per file, so a crash never leaves a half-written file. Detail: [BE-01-07](../tasks/BE-01-07-repository-interface.md), [BE-01-08](../tasks/BE-01-08-json-file-adapter.md).
 
 ### Readiness and graceful shutdown
 
-`/health/ready` checks each service's real dependencies: storage for all three, the NATS connection for `payment` and `notification`, and the consumer loops for `notification`. It returns `503` while any of them fails, for example during a NATS outage. On SIGTERM or SIGINT a service stops accepting connections, lets in-flight requests finish, then stops in order: the processor and the outbox relay (`payment`), the consumers (`notification`), the NATS connection (drained, then force-closed if the drain fails), and storage. A 10-second timer force-exits if shutdown hangs. Payments left `processing` by a shutdown are resumed on the next start. Detail: [BE-01-04](../tasks/BE-01-04-service-skeleton.md), [BE-03-05](../tasks/BE-03-05-payment-processor.md).
+`/health/ready` checks each service's real dependencies: storage for all three, the NATS connection for `payment` and `notification`, and the consumer loops for `notification`. It returns `503` while any of them fails, for example during a NATS outage. On SIGTERM or SIGINT a service stops accepting connections, lets in-flight requests finish, then stops in order: the processor and the outbox relay (`payment`), the consumers (`notification`), the NATS connection (drained, then force-closed if the drain fails), storage, and the SMTP transport (`notification`). A 10-second timer force-exits if shutdown hangs. Payments left `processing` by a shutdown are resumed on the next start. Detail: [BE-01-04](../tasks/BE-01-04-service-skeleton.md), [BE-03-05](../tasks/BE-03-05-payment-processor.md).

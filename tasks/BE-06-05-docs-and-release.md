@@ -1,7 +1,7 @@
 # BE-06-05: Final README, architecture docs and clean-clone release check
 
 **Covers:** BE-06-05, BE-06-06, BE-06-07
-**Status:** todo
+**Status:** done
 
 ## Objective
 
@@ -152,6 +152,12 @@ None.
 ## Completion Criteria
 
 Every Completion Verification check passes, and BE-06-05, BE-06-06 and BE-06-07 in `ROADMAP.md` are `done` and link to this file.
+
+## Delivery notes
+
+- BE-06-03 was not merged when this task ran, so this branch is stacked on `feat/BE-06-03-integration-tests` and its PR targets that branch.
+- Clean clone on 2026-10-19 (branch `feat/BE-06-05-docs-and-release`): the README worked as written, with no fixes needed. The PR description has the log.
+- The double-signal caveat still holds under `pnpm dev`: after one SIGINT to the process group, tsx watch printed "Previous process hasn't exited yet. Force killing..." for every service; only `notification` logged `shutdown finished`. SIGTERM straight to `node dist/main.js` shut all three down cleanly.
 
 ## Follow-ups
 
