@@ -1,6 +1,6 @@
 # payment-simulation
 
-A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
+A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email. For a one-document overview, see the [project report (PDF)](payment-simulation-report.pdf).
 
 ## What it does
 
@@ -483,6 +483,7 @@ These are deliberate trade-offs for a simulation:
 
 ## Project docs
 
+- [payment-simulation-report.pdf](payment-simulation-report.pdf): an 11-page report of what was built, the architecture, every milestone, the test results and the known limitations
 - [docs/architecture.md](docs/architecture.md): service, flow and failure-handling diagrams
 - [ROADMAP.md](ROADMAP.md): scope, decisions and status
 - [tasks/](tasks/): task docs for individual roadmap items
