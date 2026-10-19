@@ -4,9 +4,17 @@ import {
   type Repository,
   type Role,
   unprocessable,
+  VersionConflictError,
 } from "@payment-be/shared";
-import type { Payment } from "./payment.js";
-import type { CreatePaymentBody, PaymentResponse } from "./payment.schema.js";
+import type { Payment, PaymentStatus } from "./payment.js";
+import type {
+  CreatePaymentBody,
+  PaymentResponse,
+  UpdatePaymentStatusBody,
+} from "./payment.schema.js";
+import { statusChange } from "./payment.status.js";
+
+const STATUS_UPDATE_ATTEMPTS = 3;
 
 export interface PaymentOwner {
   email: string;
@@ -29,10 +37,22 @@ export interface CreatePaymentResult {
   replayed: boolean;
 }
 
+export interface StatusUpdateResult {
+  from: PaymentStatus;
+  payment: PaymentResponse;
+}
+
 export interface PaymentService {
   create: (input: CreatePaymentInput) => Promise<CreatePaymentResult>;
   get: (id: string, caller: PaymentCaller) => Promise<PaymentResponse>;
+  updateStatus: (
+    id: string,
+    update: UpdatePaymentStatusBody
+  ) => Promise<StatusUpdateResult>;
 }
+
+const paymentNotFound = () =>
+  notFound("Payment not found.", { code: "payment-not-found" });
 
 export function toPaymentResponse({
   idempotencyKey: _idempotencyKey,
@@ -107,9 +127,34 @@ export function createPaymentService(
         payment === undefined ||
         (caller.role !== "admin" && payment.userId !== caller.userId)
       ) {
-        throw notFound("Payment not found.", { code: "payment-not-found" });
+        throw paymentNotFound();
       }
       return toPaymentResponse(payment);
+    },
+    async updateStatus(id, { failureReason, status }) {
+      for (let attempt = 1; ; attempt += 1) {
+        // Re-read each attempt so the transition is checked against the latest status.
+        // biome-ignore lint/performance/noAwaitInLoops: attempts must run in sequence
+        const payment = await payments.get(id);
+        if (payment === undefined) {
+          throw paymentNotFound();
+        }
+        const patch = statusChange(payment, status, {
+          failureReason,
+          now: now(),
+        });
+        try {
+          const updated = await payments.update(id, payment.version, patch);
+          return { from: payment.status, payment: toPaymentResponse(updated) };
+        } catch (error) {
+          if (
+            !(error instanceof VersionConflictError) ||
+            attempt === STATUS_UPDATE_ATTEMPTS
+          ) {
+            throw error;
+          }
+        }
+      }
     },
   };
 }

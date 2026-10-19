@@ -9,6 +9,7 @@ import {
   createPaymentBodySchema,
   paymentEnvelopeSchema,
   paymentIdParamsSchema,
+  updatePaymentStatusBodySchema,
 } from "./payment.schema.js";
 
 const json = (schema: z.ZodType) => ({
@@ -55,6 +56,26 @@ export function registerPaymentPaths(registry: OpenAPIRegistry): void {
     },
     security: bearerSecurity,
     summary: "Get payment",
+    tags: ["payments"],
+  });
+  registry.registerPath({
+    description:
+      "Changes a payment's status. Admins only: any other caller gets `403`. An admin can cancel a `pending` payment, or mark a `processing` payment `succeeded` or `failed`. `failureReason` is required when `status` is `failed` and rejected otherwise. A change the payment's current status does not allow returns `409 invalid-status-transition`. If the payment keeps changing under concurrent updates, the request returns `409 version-conflict` and can be retried.",
+    method: "patch",
+    path: "/payments/{id}/status",
+    request: {
+      body: { content: json(updatePaymentStatusBodySchema), required: true },
+      params: paymentIdParamsSchema,
+    },
+    responses: {
+      200: {
+        content: json(paymentEnvelopeSchema),
+        description: "The payment with its new status",
+      },
+      ...problemResponses(400, 401, 403, 404, 409, 413, 415),
+    },
+    security: bearerSecurity,
+    summary: "Update payment status",
     tags: ["payments"],
   });
 }

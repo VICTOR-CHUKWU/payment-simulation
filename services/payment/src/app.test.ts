@@ -118,6 +118,40 @@ describe("payment app", () => {
     ]);
   });
 
+  it("documents PATCH /payments/{id}/status as admin-only with its errors", async () => {
+    const res = await request(app({ docs: true })).get("/docs/openapi.json");
+    const operation = res.body.paths["/payments/{id}/status"].patch;
+    expect(operation.security).toEqual([{ bearerAuth: [] }]);
+    expect(Object.keys(operation.responses).sort()).toEqual([
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+    ]);
+    expect(operation.parameters).toEqual([
+      expect.objectContaining({ in: "path", name: "id", required: true }),
+    ]);
+    expect(operation.requestBody).toMatchObject({
+      content: {
+        "application/json": {
+          schema: { $ref: "#/components/schemas/UpdatePaymentStatusRequest" },
+        },
+      },
+      required: true,
+    });
+    expect(
+      operation.responses["200"].content["application/json"].schema
+    ).toEqual({ $ref: "#/components/schemas/PaymentResponse" });
+    expect(
+      res.body.components.schemas.UpdatePaymentStatusRequest.properties.status
+        .enum
+    ).toEqual(["cancelled", "succeeded", "failed"]);
+  });
+
   it("documents payment success responses inside the envelope", async () => {
     const res = await request(app({ docs: true })).get("/docs/openapi.json");
     const ref = { $ref: "#/components/schemas/PaymentResponse" };
