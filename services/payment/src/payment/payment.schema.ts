@@ -53,7 +53,12 @@ export type UpdatePaymentStatusBody = z.infer<
 >;
 
 export const paymentResponseSchema = paymentFieldsSchema
-  .omit({ idempotencyKey: true, version: true })
+  .omit({
+    correlationId: true,
+    idempotencyKey: true,
+    outbox: true,
+    version: true,
+  })
   .meta({ id: "Payment" });
 
 export type PaymentResponse = z.infer<typeof paymentResponseSchema>;

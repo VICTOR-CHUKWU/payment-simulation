@@ -76,11 +76,15 @@ function setup({
   });
   const payments = createMemoryRepository<Payment>();
   const { calls, gateway } = stubGateway();
+  let kicks = 0;
   const processor = createPaymentProcessor({
     concurrency,
     gateway,
     logger,
     now: () => processedAt,
+    onOutbox: () => {
+      kicks += 1;
+    },
     payments: wrap(payments),
     pollIntervalMs: POLL_MS,
     timeoutMs: TIMEOUT_MS,
@@ -94,6 +98,7 @@ function setup({
     const createdAt = new Date(Date.UTC(2026, 9, 18, 12, 0, second ?? count));
     return await payments.insert({
       amount: 1000 * count,
+      correlationId: "req-1",
       createdAt: createdAt.toISOString(),
       currency: "NGN",
       email: EMAIL,
@@ -103,7 +108,15 @@ function setup({
       userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     });
   };
-  return { add, calls, logged, payments, processor, raw };
+  return {
+    add,
+    calls,
+    kicks: () => kicks,
+    logged,
+    payments,
+    processor,
+    raw,
+  };
 }
 
 let stops: Array<() => Promise<void>> = [];
@@ -472,5 +485,78 @@ describe("createPaymentProcessor", () => {
     await flush();
 
     expect(finds).toBe(2);
+  });
+});
+
+describe("createPaymentProcessor outbox", () => {
+  const entries = async (payments: Repository<Payment>, id: string) =>
+    ((await payments.get(id))?.outbox ?? []).map(
+      ({ correlationId, event }) => ({
+        correlationId,
+        failureReason: event.data.failureReason,
+        type: event.type,
+      })
+    );
+
+  it("adds processing and succeeded events with the creating request's ID", async () => {
+    const { add, calls, kicks, payments, processor } = started();
+    const payment = await add();
+
+    await processor.sweep();
+    expect(kicks()).toBe(1);
+    calls[0]?.resolve({ outcome: "approved" });
+    await flush();
+
+    expect(await entries(payments, payment.id)).toEqual([
+      {
+        correlationId: "req-1",
+        failureReason: undefined,
+        type: "payment.processing",
+      },
+      {
+        correlationId: "req-1",
+        failureReason: undefined,
+        type: "payment.succeeded",
+      },
+    ]);
+    expect(kicks()).toBe(2);
+  });
+
+  it("adds a failed event with the gateway's reason", async () => {
+    const { add, calls, payments, processor } = started();
+    const payment = await add();
+
+    await processor.sweep();
+    calls[0]?.resolve({ outcome: "declined", reason: "Insufficient funds" });
+    await flush();
+
+    expect((await entries(payments, payment.id)).at(-1)).toEqual({
+      correlationId: "req-1",
+      failureReason: "Insufficient funds",
+      type: "payment.failed",
+    });
+  });
+
+  it("does not kick the relay after a skipped claim", async () => {
+    let cancel: (() => Promise<unknown>) | undefined;
+    const { add, kicks, payments, processor } = started({
+      wrap: (inner) => ({
+        ...inner,
+        async find(predicate) {
+          const found = await inner.find(predicate);
+          await cancel?.();
+          return found;
+        },
+      }),
+    });
+    const payment = await add();
+    cancel = () =>
+      transitionPayment(payments, payment.id, "cancelled", {
+        now: () => processedAt,
+      });
+
+    await processor.sweep();
+
+    expect(kicks()).toBe(0);
   });
 });

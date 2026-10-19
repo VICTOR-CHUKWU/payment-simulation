@@ -44,7 +44,7 @@ How the processor behaves:
 
 ### Events
 
-Payment events go to the JetStream stream `PAYMENTS`, which captures `payment.>`, with one subject per status change. Each event's `type` is also its subject. The payment service starts publishing them in BE-04-02; until then the stream exists but stays empty.
+Payment events go to the JetStream stream `PAYMENTS`, which captures `payment.>`, with one subject per status change. Each event's `type` is also its subject.
 
 | Type | Emitted when |
 |---|---|
@@ -54,9 +54,16 @@ Payment events go to the JetStream stream `PAYMENTS`, which captures `payment.>`
 | `payment.failed` | The payment fails, through the gateway or an admin |
 | `payment.cancelled` | An admin cancels a `pending` payment |
 
-Every event has the shared envelope (`eventId`, `type`, `occurredAt`, `data`). `data` holds `paymentId`, `userId`, `email`, `amount` (integer minor units), `currency` (ISO 4217 code) and the optional `description`. `payment.failed` also carries `failureReason`. The request's correlation ID travels in the `x-correlation-id` message header.
+Every event has the shared envelope (`eventId`, `type`, `occurredAt`, `data`). `data` holds `paymentId`, `userId`, `email`, `amount` (integer minor units), `currency` (ISO 4217 code) and the optional `description`. `payment.failed` also carries `failureReason`. A correlation ID travels in the `x-correlation-id` message header. Events from the processor carry the ID of the `POST /payments` request that created the payment, so one ID follows a payment through every service. Events from an admin `PATCH /payments/:id/status` carry that request's own ID.
 
 The stream stores messages on disk for 7 days. JetStream drops a second publish of the same `eventId` within 2 minutes; consumers still handle duplicates themselves.
+
+How the payment service publishes:
+
+- Each event is saved in an outbox on the payment record, in the same write that changes the status. A status change and its event are always saved together, even if NATS is down.
+- An outbox relay publishes waiting events right after each change, then checks again every `OUTBOX_RELAY_INTERVAL_MS`, and once at startup for events left from the previous run. A sent event is removed from the outbox. The outbox is internal and never appears in API responses.
+- One payment's events are always published in order. If a publish fails, that payment's later events wait for the next try.
+- Delivery is at least once. If the service stops after a publish but before removing the event, the event is sent again with the same `eventId`. Within 2 minutes JetStream drops the repeat; after that, consumers ignore it.
 
 ## Tech stack
 
@@ -85,7 +92,7 @@ pnpm dev
 
 `LOGIN_RATE_LIMIT_MAX` (default `10`) and `LOGIN_RATE_LIMIT_WINDOW_MS` (default `900000`, 15 minutes) set how many failed logins `auth` allows per client IP in each window (see [Auth endpoints](#auth-endpoints)).
 
-The payment processor and simulated gateway (see [Payment flow](#payment-flow)) read these:
+The payment processor, simulated gateway (see [Payment flow](#payment-flow)) and outbox relay (see [Events](#events)) read these:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -95,6 +102,7 @@ The payment processor and simulated gateway (see [Payment flow](#payment-flow)) 
 | `GATEWAY_FAILURE_RATE` | `0.2` | Share of answers that decline the payment, from `0` to `1` |
 | `GATEWAY_TIMEOUT_RATE` | `0.05` | Share of calls the gateway never answers, from `0` to `1` |
 | `GATEWAY_TIMEOUT_MS` | `10000` | How long the processor waits before failing the payment; must be greater than `GATEWAY_MAX_DELAY_MS` |
+| `OUTBOX_RELAY_INTERVAL_MS` | `1000` | Time between checks for payment events still waiting to be published (at least `10`) |
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -105,7 +113,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor (payment), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. `payment` then publishes any events left waiting from its previous run. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor and then the outbox relay (payment), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
 
 ### Health checks
 

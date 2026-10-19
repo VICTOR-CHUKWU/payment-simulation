@@ -24,12 +24,14 @@ export function createApp({
   docs,
   jwtSecret,
   logger,
+  onOutbox,
   payments,
 }: {
   checks: ReadinessCheck[];
   docs: boolean;
   jwtSecret: string;
   logger: Logger;
+  onOutbox?: () => void;
   payments: Repository<Payment>;
 }): Express {
   const app = express();
@@ -42,7 +44,7 @@ export function createApp({
   }
   app.use(
     paymentRouter(
-      createPaymentController(createPaymentService(payments)),
+      createPaymentController(createPaymentService(payments, { onOutbox })),
       jwtSecret
     )
   );

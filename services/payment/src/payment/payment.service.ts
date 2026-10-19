@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type Repository, type Role, unprocessable } from "@payment-be/shared";
 import type { Payment, PaymentStatus } from "./payment.js";
+import { outboxEntry } from "./payment.outbox.js";
 import type {
   CreatePaymentBody,
   PaymentResponse,
@@ -20,6 +21,7 @@ export interface PaymentCaller {
 
 export interface CreatePaymentInput {
   body: CreatePaymentBody;
+  correlationId?: string;
   idempotencyKey?: string;
   owner: PaymentOwner;
 }
@@ -39,12 +41,15 @@ export interface PaymentService {
   get: (id: string, caller: PaymentCaller) => Promise<PaymentResponse>;
   updateStatus: (
     id: string,
-    update: UpdatePaymentStatusBody
+    update: UpdatePaymentStatusBody,
+    options?: { correlationId?: string }
   ) => Promise<StatusUpdateResult>;
 }
 
 export function toPaymentResponse({
+  correlationId: _correlationId,
   idempotencyKey: _idempotencyKey,
+  outbox: _outbox,
   version: _version,
   ...payment
 }: Payment): PaymentResponse {
@@ -58,7 +63,10 @@ const sameRequest = (payment: Payment, body: CreatePaymentBody): boolean =>
 
 export function createPaymentService(
   payments: Repository<Payment>,
-  { now = () => new Date() }: { now?: () => Date } = {}
+  {
+    now = () => new Date(),
+    onOutbox = () => undefined,
+  }: { now?: () => Date; onOutbox?: () => void } = {}
 ): PaymentService {
   // The repository has no unique index on the idempotency key, so creates run
   // one at a time to stop two concurrent requests with one key both inserting.
@@ -66,19 +74,25 @@ export function createPaymentService(
 
   const insert = async ({
     body,
+    correlationId,
     idempotencyKey,
     owner,
   }: CreatePaymentInput) => {
     const timestamp = now().toISOString();
-    return await payments.insert({
+    const record = {
       ...body,
       createdAt: timestamp,
       email: owner.email,
       id: randomUUID(),
-      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
-      status: "pending",
+      status: "pending" as const,
       updatedAt: timestamp,
       userId: owner.userId,
+    };
+    return await payments.insert({
+      ...record,
+      ...(correlationId === undefined ? {} : { correlationId }),
+      ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+      outbox: [outboxEntry(record, correlationId)],
     });
   };
 
@@ -101,7 +115,9 @@ export function createPaymentService(
         return { payment: toPaymentResponse(existing), replayed: true };
       }
     }
-    return { payment: toPaymentResponse(await insert(input)), replayed: false };
+    const payment = await insert(input);
+    onOutbox();
+    return { payment: toPaymentResponse(payment), replayed: false };
   };
 
   return {
@@ -120,11 +136,13 @@ export function createPaymentService(
       }
       return toPaymentResponse(payment);
     },
-    async updateStatus(id, { failureReason, status }) {
+    async updateStatus(id, { failureReason, status }, { correlationId } = {}) {
       const { from, payment } = await transitionPayment(payments, id, status, {
+        correlationId,
         failureReason,
         now,
       });
+      onOutbox();
       return { from, payment: toPaymentResponse(payment) };
     },
   };

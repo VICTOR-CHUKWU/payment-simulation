@@ -27,6 +27,7 @@ export function createPaymentController(
       const { email, sub } = getAuth(req);
       const { payment, replayed } = await service.create({
         body,
+        correlationId: String(req.id),
         idempotencyKey,
         owner: { email, userId: sub },
       });
@@ -50,7 +51,9 @@ export function createPaymentController(
     async updateStatus(req, res) {
       const { id } = paymentIdParamsSchema.parse(req.params);
       const body = updatePaymentStatusBodySchema.parse(req.body);
-      const { from, payment } = await service.updateStatus(id, body);
+      const { from, payment } = await service.updateStatus(id, body, {
+        correlationId: String(req.id),
+      });
       req.log.info(
         { from, paymentId: payment.id, to: payment.status },
         "payment status updated"

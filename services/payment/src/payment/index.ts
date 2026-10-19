@@ -17,6 +17,14 @@ export {
   paymentStatusSchema,
 } from "./payment.js";
 export { registerPaymentPaths } from "./payment.openapi.js";
+export {
+  correlationIdSchema,
+  type OutboxEntry,
+  type OutboxSource,
+  outboxEntry,
+  outboxEntrySchema,
+  toEventType,
+} from "./payment.outbox.js";
 export { paymentRouter } from "./payment.routes.js";
 export {
   type CreatePaymentBody,

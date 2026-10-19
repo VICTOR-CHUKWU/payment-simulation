@@ -21,6 +21,7 @@ export const paymentConfigSchema = baseConfigSchema
     GATEWAY_MIN_DELAY_MS: milliseconds(0, 1000),
     GATEWAY_TIMEOUT_MS: milliseconds(1, 10_000),
     GATEWAY_TIMEOUT_RATE: rate(0.05),
+    OUTBOX_RELAY_INTERVAL_MS: milliseconds(10, 1000),
     PAYMENT_PORT: z.coerce.number().int().min(1).max(65_535).default(3002),
     PROCESSOR_CONCURRENCY: z.coerce.number().int().min(1).default(5),
     PROCESSOR_POLL_INTERVAL_MS: milliseconds(10, 1000),

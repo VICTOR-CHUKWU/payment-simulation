@@ -3,6 +3,7 @@ import {
   createLogger,
   drainNats,
   ensureStream,
+  jetstream,
   jetstreamManager,
   listen,
   loadConfig,
@@ -13,6 +14,7 @@ import {
 } from "@payment-be/shared";
 import { createApp } from "./app.js";
 import { paymentConfigSchema } from "./config/index.js";
+import { createOutboxRelay } from "./outbox/index.js";
 import { paymentSchema } from "./payment/index.js";
 import {
   createPaymentProcessor,
@@ -42,12 +44,19 @@ try {
     name: "payments",
     schema: paymentSchema,
   });
+  const relay = createOutboxRelay({
+    intervalMs: config.OUTBOX_RELAY_INTERVAL_MS,
+    js: jetstream(nc),
+    logger,
+    payments: repository,
+  });
   const server = await listen(
     createApp({
       checks: [natsCheck(nc), check],
       docs,
       jwtSecret: config.JWT_SECRET,
       logger,
+      onOutbox: relay.kick,
       payments: repository,
     }),
     config.PAYMENT_PORT
@@ -65,15 +74,17 @@ try {
       timeoutRate: config.GATEWAY_TIMEOUT_RATE,
     }),
     logger,
+    onOutbox: relay.kick,
     payments: repository,
     pollIntervalMs: config.PROCESSOR_POLL_INTERVAL_MS,
     timeoutMs: config.GATEWAY_TIMEOUT_MS,
   });
+  relay.start();
   processor.start();
   onShutdown({
     logger,
     server,
-    tasks: [processor.stop, () => drainNats(nc), close],
+    tasks: [processor.stop, relay.stop, () => drainNats(nc), close],
   });
 } catch (err) {
   logger.fatal({ err }, "startup failed");

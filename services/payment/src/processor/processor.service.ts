@@ -27,6 +27,7 @@ export interface PaymentProcessorOptions {
   gateway: PaymentGateway;
   logger: Logger;
   now?: () => Date;
+  onOutbox?: () => void;
   payments: Repository<Payment>;
   pollIntervalMs: number;
   timeoutMs: number;
@@ -51,6 +52,7 @@ export function createPaymentProcessor({
   gateway,
   logger,
   now = () => new Date(),
+  onOutbox = () => undefined,
   payments,
   pollIntervalMs,
   timeoutMs,
@@ -76,6 +78,7 @@ export function createPaymentProcessor({
         "processing",
         { now }
       );
+      onOutbox();
       logger.info({ paymentId: payment.id }, "payment claimed");
       return claimed.payment;
     } catch (err) {
@@ -135,6 +138,7 @@ export function createPaymentProcessor({
       result.outcome === "declined" ? result.reason : undefined;
     try {
       await transitionPayment(payments, paymentId, to, { failureReason, now });
+      onOutbox();
       logger.info(
         { paymentId, status: to, ...(failureReason ? { failureReason } : {}) },
         "payment processed"

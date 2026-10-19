@@ -9,7 +9,11 @@ import {
 import { nanos } from "@nats-io/transport-node";
 
 // biome-ignore lint/performance/noBarrelFile: services reach JetStream only through the shared lib
-export { jetstreamManager } from "@nats-io/jetstream";
+export {
+  type JetStreamClient,
+  jetstream,
+  jetstreamManager,
+} from "@nats-io/jetstream";
 
 const STREAM_NAME_IN_USE = 10_058;
 

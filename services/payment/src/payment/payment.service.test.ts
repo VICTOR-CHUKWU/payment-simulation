@@ -50,7 +50,25 @@ describe("createPaymentService.create", () => {
       updatedAt: "2026-10-18T12:00:00.000Z",
       userId: owner.userId,
     });
-    expect(await payments.get(payment.id)).toEqual({ ...payment, version: 1 });
+    expect(await payments.get(payment.id)).toEqual({
+      ...payment,
+      outbox: [
+        {
+          event: expect.objectContaining({
+            data: {
+              amount: 150_000,
+              currency: "NGN",
+              description: "Order #42",
+              email: owner.email,
+              paymentId: payment.id,
+              userId: owner.userId,
+            },
+            type: "payment.created",
+          }),
+        },
+      ],
+      version: 1,
+    });
   });
 
   it("leaves out description when none is given", async () => {
@@ -413,5 +431,84 @@ describe("createPaymentService.updateStatus", () => {
     expect(await payments.get(stored.id)).toMatchObject({
       status: "succeeded",
     });
+  });
+});
+
+describe("createPaymentService outbox", () => {
+  function counted() {
+    const payments = createMemoryRepository<Payment>();
+    let kicks = 0;
+    const service = createPaymentService(payments, {
+      now,
+      onOutbox: () => {
+        kicks += 1;
+      },
+    });
+    return { kicks: () => kicks, payments, service };
+  }
+
+  it("stores the correlation ID with the created event and kicks the relay", async () => {
+    const { kicks, payments, service } = counted();
+
+    const { payment } = await service.create({
+      body,
+      correlationId: "req-1",
+      owner,
+    });
+
+    const stored = await payments.get(payment.id);
+    expect(stored?.correlationId).toBe("req-1");
+    expect(stored?.outbox).toEqual([
+      {
+        correlationId: "req-1",
+        event: expect.objectContaining({ type: "payment.created" }),
+      },
+    ]);
+    expect(payment).not.toHaveProperty("correlationId");
+    expect(payment).not.toHaveProperty("outbox");
+    expect(kicks()).toBe(1);
+  });
+
+  it("adds no event and does not kick on a replay", async () => {
+    const { kicks, payments, service } = counted();
+    const first = await service.create({ body, idempotencyKey: "k", owner });
+
+    await service.create({ body, idempotencyKey: "k", owner });
+
+    expect((await payments.get(first.payment.id))?.outbox).toHaveLength(1);
+    expect(kicks()).toBe(1);
+  });
+
+  it("passes the request's correlation ID to the status change", async () => {
+    const { kicks, payments, service } = counted();
+    const { payment } = await service.create({
+      body,
+      correlationId: "req-1",
+      owner,
+    });
+
+    await service.updateStatus(
+      payment.id,
+      { status: "cancelled" },
+      { correlationId: "req-2" }
+    );
+
+    const stored = await payments.get(payment.id);
+    expect(stored?.correlationId).toBe("req-1");
+    expect(stored?.outbox?.at(-1)).toEqual({
+      correlationId: "req-2",
+      event: expect.objectContaining({ type: "payment.cancelled" }),
+    });
+    expect(kicks()).toBe(2);
+  });
+
+  it("does not kick when the status change fails", async () => {
+    const { kicks, service } = counted();
+    const { payment } = await service.create({ body, owner });
+
+    await expect(
+      service.updateStatus(payment.id, { status: "succeeded" })
+    ).rejects.toMatchObject({ code: "invalid-status-transition" });
+    expect(kicks()).toBe(1);
   });
 });
