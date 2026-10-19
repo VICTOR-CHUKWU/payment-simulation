@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. Email notifications are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. It also emails the payment's owner when a payment is received, succeeds, fails or is cancelled, through SMTP (Mailpit locally). Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -69,9 +69,9 @@ How the notification service consumes:
 
 - Two durable pull consumers read `PAYMENTS`, one per channel: `notification-inapp` and `notification-email`. Both take every event (`payment.>`) and ack each message explicitly.
 - A consumer created for the first time reads from the start of the stream, so events published before `notification` first started are not lost. After that, each consumer continues from its last ack.
-- Each message is checked against the event schema. A valid event is logged, handled and acked; one the channel has already processed is acked without being handled again. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered.
+- Each message is checked against the event schema. A valid event is logged, handled and acked; one the channel has already processed is acked without being handled again. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered after 5 seconds.
 - Each channel records an event as processed (in its inbox) only after its work succeeds, and skips it on any later delivery, such as a redelivery, a replay from a recreated consumer or a late outbox republish. The two channels track this separately, so one channel's record never hides an event from the other. Handling is at least once: if the service stops after the work but before the record is saved, the event is handled again.
-- The in-app handler stores a notification for every event except `payment.processing`, which follows `payment.created` within milliseconds. Each notification is keyed by the event's `eventId`, so an event handled again after a crash still leaves one notification. The email handler only logs events for now; sending email arrives with BE-05-04.
+- The in-app handler stores a notification for every event except `payment.processing`, which follows `payment.created` within milliseconds. Each notification is keyed by the event's `eventId`, so an event handled again after a crash still leaves one notification. The email handler sends an email for the same four types, to the address carried in the event, with a plain-text and an HTML body. If sending fails (for example while Mailpit is down), the message is redelivered every 5 seconds until it succeeds; bounded retries and a dead-letter queue arrive with BE-05-05 and BE-05-06. If the service stops after sending but before recording the event as processed, the email is sent again with the same `Message-ID`.
 
 ## Tech stack
 
@@ -111,6 +111,15 @@ The payment processor, simulated gateway (see [Payment flow](#payment-flow)) and
 | `GATEWAY_TIMEOUT_RATE` | `0.05` | Share of calls the gateway never answers, from `0` to `1` |
 | `GATEWAY_TIMEOUT_MS` | `10000` | How long the processor waits before failing the payment; must be greater than `GATEWAY_MAX_DELAY_MS` |
 | `OUTBOX_RELAY_INTERVAL_MS` | `1000` | Time between checks for payment events still waiting to be published (at least `10`) |
+
+The notification service sends email with these:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SMTP_HOST`, `SMTP_PORT` | `localhost`, `1025` | SMTP server; the defaults point at Mailpit. No login or TLS is used |
+| `SMTP_FROM` | `Payment Simulation <no-reply@payment-simulation.local>` | Sender of every email |
+
+`notification` starts and stays ready without Mailpit; emails wait until it is reachable again.
 
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
@@ -179,7 +188,7 @@ pnpm infra:down    # stop containers, keep JetStream data
 pnpm infra:reset   # stop containers and wipe JetStream data
 ```
 
-Mailpit keeps emails in memory, so they are cleared whenever its container stops.
+Emails sent by `notification` appear in the Mailpit web UI at http://localhost:8025. Mailpit keeps emails in memory, so they are cleared whenever its container stops.
 
 ### Checks
 

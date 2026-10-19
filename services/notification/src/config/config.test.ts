@@ -7,6 +7,7 @@ import {
 import { notificationConfigSchema } from "./config.js";
 
 const JWT_SECRET_NAMED = /JWT_SECRET/;
+const SMTP_PORT_NAMED = /SMTP_PORT/;
 
 const load = (env: Record<string, string>) =>
   loadConfig(notificationConfigSchema, env);
@@ -33,6 +34,23 @@ describe("notificationConfigSchema", () => {
       STORAGE_DRIVER: "file",
     });
   });
+
+  it("applies the SMTP defaults", () => {
+    expect(load({ NODE_ENV: "development" })).toMatchObject({
+      SMTP_FROM: "Payment Simulation <no-reply@payment-simulation.local>",
+      SMTP_HOST: "localhost",
+      SMTP_PORT: 1025,
+    });
+  });
+
+  it.each(["0", "70000", "abc"])(
+    "rejects SMTP_PORT=%s and names it",
+    (port) => {
+      expect(() => load({ NODE_ENV: "development", SMTP_PORT: port })).toThrow(
+        SMTP_PORT_NAMED
+      );
+    }
+  );
 
   it("requires JWT_SECRET in production and names it", () => {
     expect(() => load({ NODE_ENV: "production" })).toThrow(JWT_SECRET_NAMED);
