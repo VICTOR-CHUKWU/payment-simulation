@@ -230,6 +230,31 @@ describe("replay", () => {
     }
   );
 
+  it("names the SMTP response code when the error has no code", async () => {
+    const { jsm } = fakeStreams([entry()]);
+    const service = createDlqService({
+      emailService: {
+        send: () => Promise.reject(new EmailSendError({ responseCode: 451 })),
+      },
+      jsm,
+    });
+    const err = await service
+      .replay(1, capture().logger)
+      .catch((x: unknown) => x);
+    expect((err as AppError).detail).toContain("(451)");
+  });
+
+  it("rethrows a send error that is not an EmailSendError and keeps the entry", async () => {
+    const boom = new Error("boom");
+    const { jsm, messages } = fakeStreams([entry()]);
+    const service = createDlqService({
+      emailService: { send: () => Promise.reject(boom) },
+      jsm,
+    });
+    await expect(service.replay(1, capture().logger)).rejects.toBe(boom);
+    expect(messages.has(1)).toBe(true);
+  });
+
   it("returns 404 for an unknown entry", async () => {
     const { jsm } = fakeStreams([]);
     const service = createDlqService({ emailService: sentOk, jsm });

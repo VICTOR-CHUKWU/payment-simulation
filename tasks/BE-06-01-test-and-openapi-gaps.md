@@ -1,7 +1,7 @@
 # BE-06-01: Close unit, API and OpenAPI gaps
 
 **Covers:** BE-06-01, BE-06-02, BE-06-04
-**Status:** todo
+**Status:** done
 
 ## Objective
 

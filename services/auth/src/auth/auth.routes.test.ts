@@ -338,3 +338,52 @@ describe("login rate limit", () => {
     expect((await register(app, right)).status).toBe(409);
   });
 });
+
+describe("auth request body errors", () => {
+  it.each(["/auth/register", "/auth/login"])(
+    "returns 415 for an unsupported charset on %s",
+    async (path) => {
+      const { app } = await setup();
+      const res = await request(app)
+        .post(path)
+        .set("content-type", "application/json; charset=latin1")
+        .send(JSON.stringify({ email: "a@example.com", password: "x" }));
+      expect(res.status).toBe(415);
+      expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+      expect(res.body.code).toBe("unsupported-media-type");
+    }
+  );
+
+  it("returns 413 for a login body over 16kb", async () => {
+    const { app } = await setup();
+    const res = await login(app, {
+      email: "user@example.com",
+      password: "x".repeat(17 * 1024),
+    });
+    expect(res.status).toBe(413);
+    expect(res.body.code).toBe("payload-too-large");
+  });
+
+  it("returns 500 internal-error without details when storage fails", async () => {
+    const failing = createApp({
+      checks: [],
+      docs: false,
+      jwtSecret: "s".repeat(32),
+      logger: createLogger({ level: "silent", pretty: false, service: "test" }),
+      loginRateLimit: { max: 1000, windowMs: 60_000 },
+      users: {
+        ...createMemoryRepository<User>(),
+        findOne: () => Promise.reject(new Error("disk on fire")),
+        findOneBy: () => Promise.reject(new Error("disk on fire")),
+      },
+    });
+    const res = await register(failing, {
+      email: "new@example.com",
+      password: "Password1!",
+    });
+    expect(res.status).toBe(500);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("internal-error");
+    expect(JSON.stringify(res.body)).not.toContain("disk on fire");
+  });
+});

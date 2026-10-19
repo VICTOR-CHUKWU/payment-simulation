@@ -642,6 +642,29 @@ describe("PATCH /payments/:id/status", () => {
     );
   });
 
+  it("returns 413 for a body over 16kb", async () => {
+    const { app, id } = await stored();
+    const res = await patch(
+      app,
+      id,
+      { failureReason: "x".repeat(17 * 1024), status: "failed" },
+      await asAdmin()
+    );
+    expect(res.status).toBe(413);
+    expect(res.body.code).toBe("payload-too-large");
+  });
+
+  it("returns 415 for an unsupported charset", async () => {
+    const { app, id } = await stored();
+    const res = await request(app)
+      .patch(`/payments/${id}/status`)
+      .set("authorization", `Bearer ${await asAdmin()}`)
+      .set("content-type", "application/json; charset=latin1")
+      .send(JSON.stringify({ status: "cancelled" }));
+    expect(res.status).toBe(415);
+    expect(res.body.code).toBe("unsupported-media-type");
+  });
+
   it("returns 409 when cancelling twice", async () => {
     const { app, id } = await stored();
     const token = await asAdmin();
@@ -704,4 +727,40 @@ describe("payment outbox over HTTP", () => {
       ["payment.cancelled", "patch-req-1"],
     ]);
   });
+});
+
+describe("payment storage failure", () => {
+  it.each([
+    ["post", "/payments"],
+    ["get", `/payments/${randomUUID()}`],
+  ] as const)(
+    "%s %s returns 500 internal-error without details",
+    async (method, path) => {
+      const failing = () => Promise.reject(new Error("disk on fire"));
+      const app = createApp({
+        checks: [],
+        docs: false,
+        jwtSecret: SECRET,
+        logger: createLogger({
+          level: "silent",
+          pretty: false,
+          service: "test",
+        }),
+        payments: {
+          ...createMemoryRepository<Payment>(),
+          findOneBy: failing,
+          get: failing,
+          insert: failing,
+        },
+      });
+      const res = await request(app)
+        [method](path)
+        .set("authorization", `Bearer ${await sign()}`)
+        .send(valid);
+      expect(res.status).toBe(500);
+      expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+      expect(res.body.code).toBe("internal-error");
+      expect(JSON.stringify(res.body)).not.toContain("disk on fire");
+    }
+  );
 });

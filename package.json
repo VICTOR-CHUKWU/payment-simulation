@@ -14,6 +14,7 @@
     "infra:up": "docker compose up -d --wait",
     "start": "pnpm -r --parallel --filter \"./services/*\" start",
     "test": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js",
+    "test:coverage": "node --experimental-vm-modules --disable-warning=ExperimentalWarning node_modules/jest/bin/jest.js --coverage",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "devDependencies": {

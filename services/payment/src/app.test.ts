@@ -102,6 +102,7 @@ describe("payment app", () => {
       "413",
       "415",
       "422",
+      "500",
     ]);
     expect(operation.parameters).toEqual([
       expect.objectContaining({
@@ -121,6 +122,7 @@ describe("payment app", () => {
       "400",
       "401",
       "404",
+      "500",
     ]);
     expect(operation.parameters).toEqual([
       expect.objectContaining({ in: "path", name: "id", required: true }),
@@ -140,6 +142,7 @@ describe("payment app", () => {
       "409",
       "413",
       "415",
+      "500",
     ]);
     expect(operation.parameters).toEqual([
       expect.objectContaining({ in: "path", name: "id", required: true }),

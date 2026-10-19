@@ -162,6 +162,44 @@ describe("admin DLQ routes", () => {
     expect(messages.has(1)).toBe(true);
   });
 
+  it("returns 409 replay-in-progress for a second replay of the same entry", async () => {
+    const { promise: pending, resolve } = Promise.withResolvers<void>();
+    const { app } = setup({ send: () => pending });
+    const token = await sign();
+    const first = call(app, "post", "/admin/dlq/1/replay", token).then(
+      (r) => r
+    );
+    await new Promise((done) => setTimeout(done, 20));
+    const second = await call(app, "post", "/admin/dlq/1/replay", token);
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe("replay-in-progress");
+    resolve();
+    expect((await first).status).toBe(200);
+  });
+
+  it("returns 500 internal-error when the DLQ stream cannot be read", async () => {
+    const app = createApp({
+      checks: [],
+      dlq: createDlqService({
+        emailService: { send: () => Promise.resolve() },
+        jsm: {
+          streams: {
+            deleteMessage: () => Promise.resolve(true),
+            getMessage: () => Promise.reject(new Error("nats down")),
+            info: () => Promise.reject(new Error("nats down")),
+          },
+        },
+      }),
+      docs: false,
+      jwtSecret: SECRET,
+      logger,
+      notifications: createMemoryRepository<Notification>(),
+    });
+    const res = await call(app, "get", "/admin/dlq", await sign());
+    expect(res.status).toBe(500);
+    expect(res.body.code).toBe("internal-error");
+  });
+
   it.each([
     ["get", "/admin/dlq/0"],
     ["get", "/admin/dlq/abc"],

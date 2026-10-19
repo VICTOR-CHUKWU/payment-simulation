@@ -405,4 +405,45 @@ describe("startConsumer", () => {
     ).toEqual(["heartbeats_missed", "consumer_deleted"]);
     await consumer.stop();
   });
+
+  it("logs and keeps consuming when the status watch fails", async () => {
+    const stream = stubStream<string>();
+    stream.messages.status = async function* () {
+      yield* [];
+      throw new Error("status ended");
+    };
+    const handled: string[] = [];
+    const { lines, logger } = capture();
+    const consumer = await startConsumer({
+      durable: "test-consumer",
+      handle: (msg) => {
+        handled.push(msg);
+        return Promise.resolve();
+      },
+      js: {
+        consumers: {
+          get: () =>
+            Promise.resolve({
+              consume: () => Promise.resolve(stream.messages),
+            }),
+        },
+      },
+      logger,
+      stream: "PAYMENTS",
+    });
+    stream.push("a");
+    await flush();
+    expect(handled).toEqual(["a"]);
+    expect(consumer.running()).toBe(true);
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          consumer: "test-consumer",
+          level: 40,
+          msg: "consumer status watch failed",
+        }),
+      ])
+    );
+    await consumer.stop();
+  });
 });
