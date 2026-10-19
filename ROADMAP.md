@@ -27,7 +27,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | Testing | Jest + supertest (unit + API), plus cross-service integration tests against NATS (from the BE-01-03 compose stack) |
 | API docs | OpenAPI spec generated from the Zod schemas (`@asteasolutions/zod-to-openapi`), served via Swagger UI at `/docs`, summarised in README. Each endpoint milestone registers its route |
 | Caching | None. Data already lives in memory (the JSON-file adapter loads into memory too), and everything runs as one instance per service, so Redis would add infrastructure without speeding anything up |
-| Scope | Core requirements + polish; stretch items in Phase 7. Auth, NATS and notifications go beyond the "for simplicity" requirements on purpose, to show service boundaries and failure handling; persistence stays simple |
+| Scope | Core requirements + polish; stretch items in Phase 7, deferred. Auth, NATS and notifications go beyond the "for simplicity" requirements on purpose, to show service boundaries and failure handling; persistence stays simple |
 
 ## Phase 1 — Foundation
 
@@ -51,7 +51,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-02-01 | Auth service scaffold with user model, repository and seeded admin + user accounts | done | [tasks/BE-02-01-auth-users-seed.md](tasks/BE-02-01-auth-users-seed.md) |
 | BE-02-02 | `POST /auth/register` and `POST /auth/login` (bcrypt, JWT with `sub`/`email`/`role` claims) | done | [tasks/BE-02-02-auth-register-login.md](tasks/BE-02-02-auth-register-login.md) |
 | BE-02-03 | Shared-lib auth middleware (JWT verification, role guard) | done | [tasks/BE-02-03-auth-middleware.md](tasks/BE-02-03-auth-middleware.md) |
-| BE-02-04 | HTTP hardening (helmet, CORS, rate limit on login) | in-progress | [tasks/BE-02-04-http-hardening.md](tasks/BE-02-04-http-hardening.md) |
+| BE-02-04 | HTTP hardening (helmet, CORS, rate limit on login) | done | [tasks/BE-02-04-http-hardening.md](tasks/BE-02-04-http-hardening.md) |
 
 ## Phase 3 — Payments
 
@@ -88,23 +88,25 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 
 | ID | Milestone | Status | Task doc |
 |---|---|---|---|
-| BE-06-01 | Unit test suite completed: gaps closed across state machine, services, repositories, processor and notification handlers, plus a coverage report | todo | — |
-| BE-06-02 | API test suite completed with supertest (happy paths + error responses for every endpoint) | todo | — |
-| BE-06-03 | Cross-service integration tests (event flow, retries, DLQ, duplicate delivery) | todo | — |
-| BE-06-04 | OpenAPI spec reviewed for completeness across all services (examples, error responses, auth) | todo | — |
-| BE-06-05 | README finalised (setup, run locally, demo accounts, API reference, testing approach, design notes) | todo | — |
-| BE-06-06 | Architecture docs (service diagram, event catalogue, failure handling) | todo | — |
-| BE-06-07 | Git repository published with run-locally instructions verified from a clean clone | todo | — |
+| BE-06-01 | Unit test suite completed: gaps closed across state machine, services, repositories, processor and notification handlers, plus a coverage report | todo | [tasks/BE-06-01-test-and-openapi-gaps.md](tasks/BE-06-01-test-and-openapi-gaps.md) |
+| BE-06-02 | API test suite completed with supertest (happy paths + error responses for every endpoint) | todo | [tasks/BE-06-01-test-and-openapi-gaps.md](tasks/BE-06-01-test-and-openapi-gaps.md) |
+| BE-06-03 | Cross-service integration tests (event flow, retries, DLQ, duplicate delivery) | todo | [tasks/BE-06-03-integration-tests.md](tasks/BE-06-03-integration-tests.md) |
+| BE-06-04 | OpenAPI spec reviewed for completeness across all services (examples, error responses, auth) | todo | [tasks/BE-06-01-test-and-openapi-gaps.md](tasks/BE-06-01-test-and-openapi-gaps.md) |
+| BE-06-05 | README finalised (setup, run locally, demo accounts, API reference, testing approach, design notes) | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
+| BE-06-06 | Architecture docs (service diagram, event catalogue, failure handling) | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
+| BE-06-07 | Git repository published with run-locally instructions verified from a clean clone | todo | [tasks/BE-06-05-docs-and-release.md](tasks/BE-06-05-docs-and-release.md) |
 
 ## Phase 7 — Stretch
+
+Deferred on 2026-10-19: not planned for this project. Pick a milestone up only if the user re-enables Phase 7.
 
 | ID | Milestone | Status | Task doc |
 |---|---|---|---|
 | BE-07-01 | ~~Idempotency keys on payment creation~~ — moved to BE-03-07 | cancelled | — |
-| BE-07-02 | `GET /payments` list with pagination and status filter | todo | — |
-| BE-07-03 | Dockerfiles for all services + full-stack docker-compose | todo | — |
-| BE-07-04 | GitHub Actions CI (lint, typecheck, test, with NATS service container) | todo | — |
-| BE-07-05 | Prometheus `/metrics` per service via prom-client (payments by status, email retries, DLQ size) | todo | — |
+| BE-07-02 | `GET /payments` list with pagination and status filter | deferred | — |
+| BE-07-03 | Dockerfiles for all services + full-stack docker-compose | deferred | — |
+| BE-07-04 | GitHub Actions CI (lint, typecheck, test, with NATS service container) | deferred | — |
+| BE-07-05 | Prometheus `/metrics` per service via prom-client (payments by status, email retries, DLQ size) | deferred | — |
 
 ## Requirements coverage
 

@@ -1,7 +1,7 @@
 # BE-02-04: HTTP hardening
 
 **Covers:** BE-02-04
-**Status:** in-progress
+**Status:** done
 
 ## Objective
 

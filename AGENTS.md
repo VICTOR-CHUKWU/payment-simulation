@@ -70,4 +70,4 @@ Before calling work done, run `pnpm check`, `pnpm typecheck` and `pnpm test`, pl
 
 ## Scope guard
 
-Phase 7 (stretch) milestones wait until Phase 6 is done. Keep auth limited to what the Decisions table lists: no refresh tokens, password reset, email verification or OAuth.
+Phase 7 (stretch) is deferred: do not start its milestones unless the user re-enables it. Keep auth limited to what the Decisions table lists: no refresh tokens, password reset, email verification or OAuth.
