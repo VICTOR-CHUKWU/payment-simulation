@@ -42,6 +42,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-01-07 | Generic repository interface (with compare-and-set updates) + in-memory adapter (shared lib) | done | [tasks/BE-01-07-repository-interface.md](tasks/BE-01-07-repository-interface.md) |
 | BE-01-08 | JSON-file adapter with serialized, atomic writes (temp file + rename, single writer per file) (shared lib) | done | [tasks/BE-01-08-json-file-adapter.md](tasks/BE-01-08-json-file-adapter.md) |
 | BE-01-09 | OpenAPI setup per service (spec generated from Zod schemas, Swagger UI at `/docs`) | done | [tasks/BE-01-09-openapi-setup.md](tasks/BE-01-09-openapi-setup.md) |
+| BE-01-10 | Standard success response envelope (`status`, `success`, `data`, `message`, `meta` for pages) (shared lib) | done | [tasks/BE-01-10-response-envelope.md](tasks/BE-01-10-response-envelope.md) |
 
 ## Phase 2 — Users & Auth
 
@@ -117,7 +118,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | Error handling and logging emphasis | BE-01-05, BE-01-06, BE-05-02, BE-05-05, BE-05-06 |
 | Unit tests | Every milestone ships its own tests; BE-06-01, BE-06-02 close gaps |
 | Test scripts demonstrating the testing approach (Jest) | BE-01-01, BE-06-01 – BE-06-03, BE-06-05 |
-| Swagger or Markdown API docs | BE-01-09, BE-06-04, BE-06-05 |
+| Swagger or Markdown API docs | BE-01-09, BE-01-10, BE-06-04, BE-06-05 |
 | Git repo + README with setup, API, testing instructions | BE-06-05, BE-06-07 |
 | Clear instructions to run locally | BE-01-01, BE-06-05, BE-06-07 |
 | Users and ownership (added) | BE-02-01 – BE-02-04, BE-03-03, BE-03-06, BE-05-03 |

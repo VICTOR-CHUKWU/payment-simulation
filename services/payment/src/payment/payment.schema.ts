@@ -1,3 +1,4 @@
+import { dataResponseSchema } from "@payment-be/shared";
 import { z } from "zod";
 import { idempotencyKeySchema, paymentFieldsSchema } from "./payment.js";
 
@@ -24,3 +25,7 @@ export const paymentResponseSchema = paymentFieldsSchema
   .meta({ id: "Payment" });
 
 export type PaymentResponse = z.infer<typeof paymentResponseSchema>;
+
+export const paymentEnvelopeSchema = dataResponseSchema(
+  paymentResponseSchema
+).meta({ id: "PaymentResponse" });

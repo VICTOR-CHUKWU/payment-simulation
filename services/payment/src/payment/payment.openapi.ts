@@ -7,8 +7,8 @@ import { z } from "zod";
 import { idempotencyKeySchema } from "./payment.js";
 import {
   createPaymentBodySchema,
+  paymentEnvelopeSchema,
   paymentIdParamsSchema,
-  paymentResponseSchema,
 } from "./payment.schema.js";
 
 const json = (schema: z.ZodType) => ({
@@ -32,10 +32,11 @@ export function registerPaymentPaths(registry: OpenAPIRegistry): void {
     },
     responses: {
       200: {
-        content: json(paymentResponseSchema),
-        description: "Replayed: payment already created with this key",
+        content: json(paymentEnvelopeSchema),
+        description:
+          "Replay: a payment already exists for this Idempotency-Key and is returned in its current state",
       },
-      201: { content: json(paymentResponseSchema), description: "Created" },
+      201: { content: json(paymentEnvelopeSchema), description: "Created" },
       ...problemResponses(400, 401, 413, 415, 422),
     },
     security: bearerSecurity,
@@ -49,7 +50,7 @@ export function registerPaymentPaths(registry: OpenAPIRegistry): void {
     path: "/payments/{id}",
     request: { params: paymentIdParamsSchema },
     responses: {
-      200: { content: json(paymentResponseSchema), description: "The payment" },
+      200: { content: json(paymentEnvelopeSchema), description: "The payment" },
       ...problemResponses(400, 401, 404),
     },
     security: bearerSecurity,

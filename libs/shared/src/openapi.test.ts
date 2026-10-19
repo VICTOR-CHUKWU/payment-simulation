@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { z } from "zod";
+import { problemDetailsSchema } from "./errors.js";
 import {
   bearerSecurity,
   buildOpenApiDocument,
@@ -75,16 +76,33 @@ describe("problemResponses", () => {
     });
     const responses = buildOpenApiDocument(registry, info).paths?.["/thing"]
       ?.get?.responses;
-    expect(responses).toEqual({
-      401: {
-        content: { "application/problem+json": { schema: PROBLEM_REF } },
-        description: "Unauthorized",
+    const problem = (status: number, title: string, code: string) => ({
+      content: {
+        "application/problem+json": {
+          example: expect.objectContaining({ code, status, title }),
+          schema: PROBLEM_REF,
+        },
       },
-      404: {
-        content: { "application/problem+json": { schema: PROBLEM_REF } },
-        description: "Not Found",
-      },
+      description: title,
     });
+    expect(responses).toEqual({
+      401: problem(401, "Unauthorized", "unauthorized"),
+      404: problem(404, "Not Found", "not-found"),
+    });
+  });
+
+  it("gives each problem example a body that matches the schema", () => {
+    const registry = createOpenApiRegistry();
+    registry.registerPath({
+      method: "get",
+      path: "/thing",
+      responses: problemResponses(422),
+    });
+    const content = buildOpenApiDocument(registry, info).paths?.["/thing"]?.get
+      ?.responses?.["422"]?.content;
+    expect(
+      problemDetailsSchema.parse(content?.["application/problem+json"]?.example)
+    ).toMatchObject({ code: "unprocessable-entity", status: 422 });
   });
 
   it("documents a protected route with bearerSecurity", () => {

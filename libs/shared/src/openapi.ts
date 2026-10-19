@@ -7,7 +7,7 @@ import {
 import { Router } from "express";
 import swaggerUi from "swagger-ui-express";
 import { z } from "zod";
-import { problemDetailsSchema } from "./errors.js";
+import { type ProblemDetails, problemDetailsSchema } from "./errors.js";
 
 export type { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 
@@ -20,6 +20,8 @@ export interface OpenApiInfo {
   title: string;
   version: string;
 }
+
+const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
 
 const problemDetails = problemDetailsSchema.meta({ id: "ProblemDetails" });
 
@@ -36,6 +38,19 @@ const json = (schema: z.ZodType) => ({
   "application/json": { schema },
 });
 
+function problemExample(status: number): ProblemDetails {
+  const title = STATUS_CODES[status] ?? "Error";
+  return {
+    code: title.toLowerCase().replace(NON_ALPHANUMERIC, "-"),
+    detail: title,
+    instance: "/path",
+    requestId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    status,
+    title,
+    type: "about:blank",
+  };
+}
+
 export const bearerSecurity: Record<string, string[]>[] = [{ bearerAuth: [] }];
 
 export function problemResponses(
@@ -45,7 +60,12 @@ export function problemResponses(
     statuses.map((status) => [
       String(status),
       {
-        content: { "application/problem+json": { schema: problemDetails } },
+        content: {
+          "application/problem+json": {
+            example: problemExample(status),
+            schema: problemDetails,
+          },
+        },
         description: STATUS_CODES[status] ?? "Error",
       },
     ])

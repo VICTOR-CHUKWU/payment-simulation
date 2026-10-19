@@ -84,17 +84,22 @@ describe("POST /payments", () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
-      ...valid,
-      createdAt: expect.any(String),
-      email: owner.email,
-      id: expect.any(String),
-      status: "pending",
-      updatedAt: res.body.createdAt,
-      userId: owner.sub,
+      data: {
+        ...valid,
+        createdAt: expect.any(String),
+        email: owner.email,
+        id: expect.any(String),
+        status: "pending",
+        updatedAt: res.body.data.createdAt,
+        userId: owner.sub,
+      },
+      message: "Payment created",
+      status: 201,
+      success: true,
     });
-    expect(res.body).not.toHaveProperty("version");
-    expect(await payments.get(res.body.id)).toEqual({
-      ...res.body,
+    expect(res.body.data).not.toHaveProperty("version");
+    expect(await payments.get(res.body.data.id)).toEqual({
+      ...res.body.data,
       version: 1,
     });
   });
@@ -115,7 +120,10 @@ describe("POST /payments", () => {
     const line = raw
       .map((entry) => JSON.parse(entry))
       .find((entry) => entry.msg === "payment created");
-    expect(line).toMatchObject({ paymentId: res.body.id, userId: owner.sub });
+    expect(line).toMatchObject({
+      paymentId: res.body.data.id,
+      userId: owner.sub,
+    });
     expect(raw.join("\n")).not.toContain(owner.email);
   });
 
@@ -257,9 +265,13 @@ describe("POST /payments with an Idempotency-Key", () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
-    expect(second.body).toEqual(first.body);
-    expect(first.body).not.toHaveProperty("idempotencyKey");
-    expect(second.body).not.toHaveProperty("idempotencyKey");
+    expect(second.body).toEqual({
+      ...first.body,
+      message: "Payment already exists for this Idempotency-Key",
+      status: 200,
+    });
+    expect(first.body.data).not.toHaveProperty("idempotencyKey");
+    expect(second.body.data).not.toHaveProperty("idempotencyKey");
     expect(await payments.find()).toHaveLength(1);
     const messages = raw.map((entry) => JSON.parse(entry).msg);
     expect(messages).toContain("payment create replayed");
@@ -317,7 +329,7 @@ describe("POST /payments with an Idempotency-Key", () => {
     );
 
     expect(theirs.status).toBe(201);
-    expect(theirs.body.id).not.toBe(mine.body.id);
+    expect(theirs.body.data.id).not.toBe(mine.body.data.id);
   });
 
   it("creates a new payment each time without the header", async () => {
@@ -343,7 +355,7 @@ describe("GET /payments/:id", () => {
       .set("authorization", `Bearer ${await sign()}`)
       .set("idempotency-key", "key-1")
       .send(valid);
-    return { ...ctx, created: created.body };
+    return { ...ctx, created: created.body.data };
   }
 
   async function get(
@@ -364,9 +376,14 @@ describe("GET /payments/:id", () => {
     const res = await get(app, created.id, await sign());
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(created);
-    expect(res.body).not.toHaveProperty("version");
-    expect(res.body).not.toHaveProperty("idempotencyKey");
+    expect(res.body).toEqual({
+      data: created,
+      message: null,
+      status: 200,
+      success: true,
+    });
+    expect(res.body.data).not.toHaveProperty("version");
+    expect(res.body.data).not.toHaveProperty("idempotencyKey");
   });
 
   it("returns another user's payment to an admin", async () => {
@@ -379,7 +396,7 @@ describe("GET /payments/:id", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(created);
+    expect(res.body.data).toEqual(created);
   });
 
   it("returns the same 404 for another user's payment and an unknown ID", async () => {

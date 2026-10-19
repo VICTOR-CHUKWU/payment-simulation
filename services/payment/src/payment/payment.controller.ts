@@ -1,4 +1,4 @@
-import { getAuth } from "@payment-be/shared";
+import { getAuth, sendData } from "@payment-be/shared";
 import type { RequestHandler } from "express";
 import {
   createPaymentBodySchema,
@@ -32,12 +32,18 @@ export function createPaymentController(
         { paymentId: payment.id },
         replayed ? "payment create replayed" : "payment created"
       );
-      res.status(replayed ? 200 : 201).json(payment);
+      sendData(
+        res,
+        payment,
+        replayed
+          ? { message: "Payment already exists for this Idempotency-Key" }
+          : { message: "Payment created", status: 201 }
+      );
     },
     async get(req, res) {
       const { id } = paymentIdParamsSchema.parse(req.params);
       const { role, sub } = getAuth(req);
-      res.json(await service.get(id, { role, userId: sub }));
+      sendData(res, await service.get(id, { role, userId: sub }));
     },
   };
 }

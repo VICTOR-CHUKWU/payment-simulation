@@ -154,14 +154,41 @@ Every service sends [helmet](https://helmetjs.github.io/)'s default security hea
 
 The docs are served only when `NODE_ENV=development`. With `test` or `production`, `/docs` returns the usual `404`.
 
-Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
+Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `data.accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
+
+### Responses
+
+Every successful response uses one envelope. The payload is in `data`, and `status` repeats the HTTP status. `message` is a short summary of what happened, or `null` when there is nothing to add (for example, a plain read).
+
+```json
+{
+  "status": 201,
+  "success": true,
+  "data": { "id": "9b89…", "status": "pending" },
+  "message": "Payment created"
+}
+```
+
+Paginated responses also carry `meta`, and `data` is an array:
+
+```json
+{
+  "status": 200,
+  "success": true,
+  "data": [ … ],
+  "message": null,
+  "meta": { "page": 1, "limit": 20, "total": 57, "totalPages": 3 }
+}
+```
+
+Errors do not use the envelope; they use Problem Details (see [Errors](#errors)). Health endpoints and `/docs/openapi.json` also return their own bodies unwrapped. The tables below list the shape of `data`.
 
 ### Auth endpoints
 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| `POST` | `/auth/register` | `{ email, password }` | `201` with `{ id, email, role, createdAt }` | `400`, `409 email-taken`, `413`, `415` |
-| `POST` | `/auth/login` | `{ email, password }` | `200` with `{ accessToken, tokenType: "Bearer", expiresIn }` | `400`, `401 invalid-credentials`, `413`, `415`, `429 too-many-requests` |
+| `POST` | `/auth/register` | `{ email, password }` | `201` with `data: { id, email, role, createdAt }` | `400`, `409 email-taken`, `413`, `415` |
+| `POST` | `/auth/login` | `{ email, password }` | `200` with `data: { accessToken, tokenType: "Bearer", expiresIn }` | `400`, `401 invalid-credentials`, `413`, `415`, `429 too-many-requests` |
 
 - Register always creates a `user`. Emails are trimmed and lowercased, so `Ada@Example.com` and `ada@example.com` are the same account. Passwords must be 8 to 72 bytes. Any other field in the body, such as `role`, is rejected with `400`.
 - Login returns an HS256 JWT valid for 24 hours (`expiresIn` is in seconds), with the claims `sub` (user ID), `email`, `role`, `iat` and `exp`. An unknown email and a wrong password get the same `401`.
@@ -184,8 +211,8 @@ Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a toke
 
 | Method | Path | Body | Success | Errors |
 |---|---|---|---|---|
-| `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `{ id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }`, or `200` with the existing payment on an idempotent replay | `400`, `401`, `413`, `415`, `422` |
-| `GET` | `/payments/:id` | — | `200` with the payment, in the same shape | `400`, `401`, `404` |
+| `POST` | `/payments` | `{ amount, currency, description? }` | `201` with `data: { id, userId, email, amount, currency, status: "pending", description?, createdAt, updatedAt }`, or `200` with the existing payment and the message `Payment already exists for this Idempotency-Key` on an idempotent replay | `400`, `401`, `413`, `415`, `422` |
+| `GET` | `/payments/:id` | — | `200` with `data`: the payment, in the same shape | `400`, `401`, `404` |
 
 - `amount` is a positive integer in minor units (kobo, cents), so `150000` in `NGN` is ₦1,500.00. Decimals are rejected.
 - `currency` is one of `NGN`, `USD`, `EUR` or `GBP`. `description` is optional, 1 to 140 characters.
@@ -198,7 +225,7 @@ Every payment endpoint needs `Authorization: Bearer <accessToken>`, using a toke
 ```sh
 TOKEN=$(curl -s -X POST localhost:3001/auth/login \
   -H 'content-type: application/json' \
-  -d '{"email":"user@example.com","password":"User123!"}' | jq -r .accessToken)
+  -d '{"email":"user@example.com","password":"User123!"}' | jq -r .data.accessToken)
 
 curl -i -X POST localhost:3002/payments \
   -H "authorization: Bearer $TOKEN" \
