@@ -118,6 +118,25 @@ describe("payment app", () => {
     ]);
   });
 
+  it("documents payment success responses inside the envelope", async () => {
+    const res = await request(app({ docs: true })).get("/docs/openapi.json");
+    const ref = { $ref: "#/components/schemas/PaymentResponse" };
+    const post = res.body.paths["/payments"].post.responses;
+    const get = res.body.paths["/payments/{id}"].get.responses;
+    for (const response of [post["200"], post["201"], get["200"]]) {
+      expect(response.content["application/json"].schema).toEqual(ref);
+    }
+    expect(res.body.components.schemas.PaymentResponse).toMatchObject({
+      properties: {
+        data: { $ref: "#/components/schemas/Payment" },
+        success: { enum: [true] },
+      },
+    });
+    expect(post["401"].content["application/problem+json"].example.status).toBe(
+      401
+    );
+  });
+
   it("serves Swagger UI when docs are enabled", async () => {
     const res = await request(app({ docs: true })).get("/docs/");
     expect(res.status).toBe(200);

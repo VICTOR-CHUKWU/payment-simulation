@@ -1,4 +1,4 @@
-import { roleSchema } from "@payment-be/shared";
+import { dataResponseSchema, roleSchema } from "@payment-be/shared";
 import { z } from "zod";
 import { passwordSchema } from "../core/index.js";
 
@@ -33,6 +33,10 @@ export const publicUserSchema = z
 
 export type PublicUser = z.infer<typeof publicUserSchema>;
 
+export const userEnvelopeSchema = dataResponseSchema(publicUserSchema).meta({
+  id: "UserResponse",
+});
+
 export const accessTokenResponseSchema = z
   .object({
     accessToken: z.string(),
@@ -42,3 +46,7 @@ export const accessTokenResponseSchema = z
   .meta({ id: "AccessToken" });
 
 export type AccessTokenResponse = z.infer<typeof accessTokenResponseSchema>;
+
+export const accessTokenEnvelopeSchema = dataResponseSchema(
+  accessTokenResponseSchema
+).meta({ id: "AccessTokenResponse" });

@@ -67,12 +67,17 @@ describe("POST /auth/register", () => {
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({
-      createdAt: expect.any(String),
-      email: "new@example.com",
-      id: expect.any(String),
-      role: "user",
+      data: {
+        createdAt: expect.any(String),
+        email: "new@example.com",
+        id: expect.any(String),
+        role: "user",
+      },
+      message: "Account created",
+      status: 201,
+      success: true,
     });
-    expect(res.body).not.toHaveProperty("passwordHash");
+    expect(res.body.data).not.toHaveProperty("passwordHash");
   });
 
   it("returns 409 email-taken for an email that differs only in case", async () => {
@@ -182,9 +187,14 @@ describe("POST /auth/login", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      accessToken: expect.any(String),
-      expiresIn: 86_400,
-      tokenType: "Bearer",
+      data: {
+        accessToken: expect.any(String),
+        expiresIn: 86_400,
+        tokenType: "Bearer",
+      },
+      message: "Logged in",
+      status: 200,
+      success: true,
     });
   });
 
@@ -244,7 +254,7 @@ describe("auth logging", () => {
     expect(logs).not.toContain("Passw0rd!");
     expect(logs).not.toContain("User123!");
     expect(logs).not.toContain("Wrong123!");
-    expect(logs).not.toContain(res.body.accessToken);
+    expect(logs).not.toContain(res.body.data.accessToken);
   });
 });
 

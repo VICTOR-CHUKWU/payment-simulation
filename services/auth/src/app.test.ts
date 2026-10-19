@@ -99,6 +99,24 @@ describe("auth app", () => {
     );
   });
 
+  it("documents success responses inside the envelope", async () => {
+    const res = await request(
+      createApp({ checks: [], docs: true, logger, ...deps() })
+    ).get("/docs/openapi.json");
+    const schemaOf = (path: string, status: string) =>
+      res.body.paths[path].post.responses[status].content["application/json"]
+        .schema;
+    expect(schemaOf("/auth/register", "201")).toEqual({
+      $ref: "#/components/schemas/UserResponse",
+    });
+    expect(schemaOf("/auth/login", "200")).toEqual({
+      $ref: "#/components/schemas/AccessTokenResponse",
+    });
+    expect(res.body.components.schemas.UserResponse.properties.data).toEqual({
+      $ref: "#/components/schemas/User",
+    });
+  });
+
   it("serves Swagger UI when docs are enabled", async () => {
     const res = await request(
       createApp({ checks: [], docs: true, logger, ...deps() })
