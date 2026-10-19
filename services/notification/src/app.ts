@@ -12,6 +12,11 @@ import {
 } from "@payment-be/shared";
 import express, { type Express } from "express";
 import {
+  createDlqController,
+  type DlqService,
+  dlqRouter,
+} from "./dlq/index.js";
+import {
   createNotificationController,
   createNotificationService,
   type Notification,
@@ -21,12 +26,14 @@ import { buildDocument } from "./openapi.js";
 
 export function createApp({
   checks,
+  dlq,
   docs,
   jwtSecret,
   logger,
   notifications,
 }: {
   checks: ReadinessCheck[];
+  dlq: DlqService;
   docs: boolean;
   jwtSecret: string;
   logger: Logger;
@@ -46,6 +53,7 @@ export function createApp({
       jwtSecret
     )
   );
+  app.use(dlqRouter(createDlqController(dlq), jwtSecret));
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;

@@ -7,6 +7,7 @@ import {
 } from "@nats-io/jetstream";
 import { nanos } from "@nats-io/transport-node";
 import {
+  DLQ_STREAM,
   ensureStream,
   PAYMENTS_STREAM,
   type StreamDefinition,
@@ -138,5 +139,28 @@ describe("PAYMENTS_STREAM", () => {
       storage: StorageType.File,
       subjects: ["payment.>"],
     });
+  });
+});
+
+describe("DLQ_STREAM", () => {
+  it("has the agreed settings", () => {
+    expect(DLQ_STREAM).toEqual({
+      discard: DiscardPolicy.Old,
+      duplicate_window: 120_000_000_000,
+      max_age: 2_592_000_000_000_000,
+      name: "DLQ",
+      num_replicas: 1,
+      retention: RetentionPolicy.Limits,
+      storage: StorageType.File,
+      subjects: ["dlq.>"],
+    });
+  });
+
+  it("is created by ensureStream when missing", async () => {
+    const { calls, jsm } = stubManager([notFound()]);
+    await expect(ensureStream(jsm, DLQ_STREAM)).resolves.toBe("created");
+    expect(calls.find((call) => call.method === "add")?.config).toEqual(
+      DLQ_STREAM
+    );
   });
 });

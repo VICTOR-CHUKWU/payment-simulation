@@ -1,6 +1,7 @@
 import {
   connectNats,
   createLogger,
+  DLQ_STREAM,
   drainNats,
   ensureConsumer,
   ensureStream,
@@ -22,7 +23,12 @@ import {
   consumersCheck,
   createEventHandler,
 } from "./consumer/index.js";
-import { createEmailService, createMailer } from "./email/index.js";
+import { createDeadLetterPublisher, createDlqService } from "./dlq/index.js";
+import {
+  createEmailChannel,
+  createEmailService,
+  createMailer,
+} from "./email/index.js";
 import { inboxRecordSchema } from "./inbox/index.js";
 import {
   createNotificationService,
@@ -74,8 +80,11 @@ try {
     name: "storage",
   };
   const jsm = await jetstreamManager(nc);
-  const stream = await ensureStream(jsm, PAYMENTS_STREAM);
-  logger.info({ result: stream, stream: PAYMENTS_STREAM.name }, "stream ready");
+  for (const definition of [PAYMENTS_STREAM, DLQ_STREAM]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one log line per stream, in order
+    const result = await ensureStream(jsm, definition);
+    logger.info({ result, stream: definition.name }, "stream ready");
+  }
   for (const channel of CHANNELS) {
     const consumer = CHANNEL_CONSUMERS[channel].durable_name;
     // biome-ignore lint/performance/noAwaitInLoops: one log line per consumer, in order
@@ -87,6 +96,12 @@ try {
     logger.info({ consumer, result }, "consumer ready");
   }
   const js = jetstream(nc);
+  const emailChannel = createEmailChannel({
+    deadLetter: createDeadLetterPublisher(js),
+    delays: config.EMAIL_RETRY_DELAYS_MS,
+    emailService,
+    maxAttempts: config.EMAIL_MAX_ATTEMPTS,
+  });
   const consumers = await Promise.all(
     CHANNELS.map((channel) =>
       startConsumer({
@@ -98,7 +113,7 @@ try {
           onEvent:
             channel === "inapp"
               ? (event) => service.record(event)
-              : (event, log) => emailService.send(event, log),
+              : emailChannel.onEvent,
         }),
         js,
         logger,
@@ -109,6 +124,7 @@ try {
   const server = await listen(
     createApp({
       checks: [natsCheck(nc), consumersCheck(consumers), storage],
+      dlq: createDlqService({ emailService, jsm }),
       docs,
       jwtSecret: config.JWT_SECRET,
       logger,

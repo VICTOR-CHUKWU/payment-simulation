@@ -9,5 +9,8 @@ export {
 export {
   type ConsumerMessage,
   createEventHandler,
+  type EventContext,
   type EventHandlerOptions,
+  NAK_DELAY_MS,
+  RetryLaterError,
 } from "./consumer.handler.js";

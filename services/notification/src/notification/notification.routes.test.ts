@@ -9,6 +9,7 @@ import {
 import { SignJWT } from "jose";
 import request from "supertest";
 import { createApp } from "../app.js";
+import type { DlqService } from "../dlq/index.js";
 import { createNotificationService, type Notification } from "./index.js";
 
 const SECRET = "s".repeat(32);
@@ -41,6 +42,12 @@ const logger = createLogger({
   service: "test",
 });
 
+const unusedDlq: DlqService = {
+  get: () => Promise.reject(new Error("unused")),
+  list: () => Promise.reject(new Error("unused")),
+  replay: () => Promise.reject(new Error("unused")),
+};
+
 async function setup() {
   const notifications = createMemoryRepository<Notification>();
   const service = createNotificationService(notifications);
@@ -64,6 +71,7 @@ async function setup() {
   };
   const app = createApp({
     checks: [],
+    dlq: unusedDlq,
     docs: false,
     jwtSecret: SECRET,
     logger,

@@ -20,7 +20,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | Money | Integer amounts in minor units (e.g. kobo, cents) plus ISO 4217 currency code; no floats |
 | Persistence | Generic repository interface in the shared lib with in-memory and JSON-file adapters, selected by env var (each service owns its data). Updates are compare-and-set on a `version` field. No database or ORM |
 | Notifications | In-app (stored, readable via API) and email (SMTP to Mailpit locally), each on its own durable consumer |
-| Email failure handling | Retries with backoff (consumer `backoff` / `nak` delay, bounded by `max_deliver`). On the last attempt the handler publishes to a `DLQ` stream and terminates the message — JetStream has no built-in dead-letter stream |
+| Email failure handling | Retries use `nak` delays computed by the handler, bounded by the handler's attempt count (no consumer `max_deliver`). On the last attempt or a permanent rejection the handler publishes to a `DLQ` stream, records the event as processed and acks, so JetStream never redelivers it — JetStream has no built-in dead-letter stream |
 | Validation | Zod schemas at the HTTP boundary, for event payloads and for env config |
 | Logging | pino + pino-http (JSON logs, pino-pretty in dev) with per-request IDs propagated as correlation IDs in event headers; passwords, tokens and auth headers redacted |
 | Observability | Structured logs and health/readiness endpoints are core. Prometheus metrics are stretch; no tracing, Prometheus server or Grafana |
@@ -80,8 +80,8 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-05-02 | Idempotent event handling, deduped per channel (`eventId` + channel) | done | [tasks/BE-05-02-idempotent-event-handling.md](tasks/BE-05-02-idempotent-event-handling.md) |
 | BE-05-03 | In-app notifications: store, `GET /notifications` (own notifications only), mark as read | done | [tasks/BE-05-03-inapp-notifications.md](tasks/BE-05-03-inapp-notifications.md) |
 | BE-05-04 | Email channel via SMTP (templates per payment event) | done | [tasks/BE-05-04-email-channel.md](tasks/BE-05-04-email-channel.md) |
-| BE-05-05 | Email retries with backoff (bounded redelivery, short delays configurable for tests) | todo | — |
-| BE-05-06 | Dead-letter stream for exhausted emails, with inspect and replay (admin only) | todo | — |
+| BE-05-05 | Email retries with backoff (bounded redelivery, short delays configurable for tests) | done | [tasks/BE-05-05-email-retries-dlq.md](tasks/BE-05-05-email-retries-dlq.md) |
+| BE-05-06 | Dead-letter stream for exhausted emails, with inspect and replay (admin only) | done | [tasks/BE-05-05-email-retries-dlq.md](tasks/BE-05-05-email-retries-dlq.md) |
 | BE-05-07 | ~~Ownership and role checks~~ — split into BE-03-06 and BE-05-03 | cancelled | — |
 
 ## Phase 6 — Quality & Deliverables

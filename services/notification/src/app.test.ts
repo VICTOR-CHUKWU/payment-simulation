@@ -5,6 +5,7 @@ import {
 } from "@payment-be/shared";
 import request from "supertest";
 import { createApp } from "./app.js";
+import type { DlqService } from "./dlq/index.js";
 import type { Notification } from "./notification/index.js";
 
 const HTML = /^text\/html/;
@@ -16,7 +17,14 @@ const logger = createLogger({
   service: "test",
 });
 
+const unusedDlq: DlqService = {
+  get: () => Promise.reject(new Error("unused")),
+  list: () => Promise.reject(new Error("unused")),
+  replay: () => Promise.reject(new Error("unused")),
+};
+
 const deps = () => ({
+  dlq: unusedDlq,
   jwtSecret: "s".repeat(32),
   logger,
   notifications: createMemoryRepository<Notification>(),
@@ -82,6 +90,9 @@ describe("notification app", () => {
         "/notifications",
         "/notifications/read",
         "/notifications/{id}/read",
+        "/admin/dlq",
+        "/admin/dlq/{seq}",
+        "/admin/dlq/{seq}/replay",
       ])
     );
   });

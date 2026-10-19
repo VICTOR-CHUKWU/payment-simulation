@@ -12,6 +12,7 @@ import { type Channel, type InboxRecord, inboxId } from "../inbox/index.js";
 
 export interface ConsumerMessage extends EventMessage {
   ack: () => void;
+  info: { deliveryCount: number };
   nak: (delayMs?: number) => void;
   seq: number;
   subject: string;
@@ -20,11 +21,30 @@ export interface ConsumerMessage extends EventMessage {
 
 export const NAK_DELAY_MS = 5000;
 
+export interface EventContext {
+  correlationId: string | undefined;
+  deliveryCount: number;
+}
+
+export class RetryLaterError extends Error {
+  readonly delayMs: number;
+
+  constructor(delayMs: number, options?: { cause?: unknown }) {
+    super(`Retry in ${delayMs} ms`, options);
+    this.name = "RetryLaterError";
+    this.delayMs = delayMs;
+  }
+}
+
 export interface EventHandlerOptions {
   channel: Channel;
   inbox: Pick<Repository<InboxRecord>, "get" | "insert">;
   logger: Logger;
-  onEvent?: (event: PaymentEvent, logger: Logger) => Promise<void>;
+  onEvent?: (
+    event: PaymentEvent,
+    logger: Logger,
+    context: EventContext
+  ) => Promise<void>;
 }
 
 // The raw input is never logged: JSON errors quote it and it carries the email.
@@ -73,9 +93,17 @@ export function createEventHandler({
           { channel, paymentId: event.data.paymentId, type: event.type },
           "event received"
         );
-        await onEvent(event, log);
+        await onEvent(event, log, {
+          correlationId,
+          deliveryCount: msg.info.deliveryCount,
+        });
       }
     } catch (err) {
+      // The channel already logged why it scheduled a retry.
+      if (err instanceof RetryLaterError) {
+        msg.nak(err.delayMs);
+        return;
+      }
       log.error({ channel, err }, "event handling failed");
       msg.nak(NAK_DELAY_MS);
       return;

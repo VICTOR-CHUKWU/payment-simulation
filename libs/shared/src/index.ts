@@ -128,6 +128,7 @@ export {
   storageConfigSchema,
 } from "./storage.js";
 export {
+  DLQ_STREAM,
   type EnsureStreamResult,
   ensureStream,
   type JetStreamClient,

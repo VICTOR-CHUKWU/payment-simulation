@@ -19,8 +19,10 @@ import {
 import {
   type ConsumerMessage,
   createEventHandler,
+  type EventContext,
   type EventHandlerOptions,
   NAK_DELAY_MS,
+  RetryLaterError,
 } from "./consumer.handler.js";
 
 const EMAIL = "ada@example.com";
@@ -34,7 +36,7 @@ const data = (type: PaymentEventType) => ({
   ...(type === "payment.failed" ? { failureReason: "declined" } : {}),
 });
 
-function stubMessage(body: unknown, correlationId?: string) {
+function stubMessage(body: unknown, correlationId?: string, deliveryCount = 1) {
   const actions: string[] = [];
   const nakDelays: (number | undefined)[] = [];
   const msg: ConsumerMessage = {
@@ -46,6 +48,7 @@ function stubMessage(body: unknown, correlationId?: string) {
       get: (key) =>
         key === CORRELATION_ID_HEADER && correlationId ? correlationId : "",
     },
+    info: { deliveryCount },
     nak: (delayMs) => {
       actions.push("nak");
       nakDelays.push(delayMs);
@@ -363,5 +366,28 @@ describe("per-channel dedupe", () => {
     expect(actions).toEqual(["ack"]);
     expect(await inbox.get(`inapp:${event.eventId}`)).toBeDefined();
     expect(await notifications.find()).toHaveLength(1);
+  });
+
+  it("passes the correlation ID and delivery count to onEvent", async () => {
+    const contexts: EventContext[] = [];
+    const { handle } = setup((_event, _log, context) => {
+      contexts.push(context);
+      return Promise.resolve();
+    });
+    await handle(stubMessage(created(), "req-9", 3).msg);
+    expect(contexts).toEqual([{ correlationId: "req-9", deliveryCount: 3 }]);
+  });
+
+  it("naks a RetryLaterError with its delay and logs nothing", async () => {
+    const { handle, inbox, lines } = setup(() =>
+      Promise.reject(new RetryLaterError(30_000))
+    );
+    const event = created();
+    const { actions, msg, nakDelays } = stubMessage(event);
+    await handle(msg);
+    expect(actions).toEqual(["nak"]);
+    expect(nakDelays).toEqual([30_000]);
+    expect(lines().filter((line) => Number(line.level) >= 40)).toEqual([]);
+    expect(await inbox.get(`inapp:${event.eventId}`)).toBeUndefined();
   });
 });
