@@ -21,12 +21,11 @@ const REQUEST_ID_HEADER = "x-request-id";
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const SENSITIVE_KEYS = ["password", "token", "accessToken", "email"];
 
-const REDACT_PATHS = [
-  "req.headers.authorization",
-  "req.headers.cookie",
-  'res.headers["set-cookie"]',
-  ...SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`, `*.*.${key}`]),
-];
+const REDACT_PATHS = SENSITIVE_KEYS.flatMap((key) => [
+  key,
+  `*.${key}`,
+  `*.*.${key}`,
+]);
 
 const boundUsers = new WeakMap<ServerResponse, LogUser>();
 
@@ -79,12 +78,20 @@ function withUser(res: ServerResponse, val: object): object {
 export function httpLogger(logger: Logger): HttpLogger {
   return pinoHttp({
     autoLogging: { ignore: (req) => req.url?.startsWith("/health/") ?? false },
+    customAttributeKeys: { reqId: "correlationId" },
     customErrorObject: (_req, res, _err, val) => withUser(res, val),
     customLogLevel: logLevel,
-    customProps: (req) => ({ correlationId: req.id }),
     customSuccessObject: (_req, res, val) => withUser(res, val),
     genReqId: requestId,
     logger,
+    quietReqLogger: true,
+    serializers: {
+      req: (req: { method: string; url: string }) => ({
+        method: req.method,
+        url: req.url,
+      }),
+      res: (res: { statusCode: number }) => ({ statusCode: res.statusCode }),
+    },
   });
 }
 

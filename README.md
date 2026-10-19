@@ -106,7 +106,7 @@ Each service logs one JSON object per line through pino. In development (`NODE_E
 
 Every HTTP request gets an ID. If the request sends an `x-request-id` header of up to 128 letters, digits, `.`, `_` or `-`, that value is reused; otherwise a UUID is generated. The ID is returned in the `x-request-id` response header and appears as `correlationId` on every log line for that request, and it travels to other services in event headers. Search for one `correlationId` to follow a request across services. Health probes are not logged.
 
-Log lines identify a signed-in user by `userId` and `role`, never by email. The `authorization`, `cookie` and `set-cookie` headers, and any `password`, `token`, `accessToken` or `email` field, are replaced with `"[Redacted]"`.
+Each request produces one `request completed` line with the method, URL, status code and response time. Request and response headers are never logged. Log lines identify a signed-in user by `userId` and `role`, never by email. Any `password`, `token`, `accessToken` or `email` field is replaced with `"[Redacted]"`.
 
 ```sh
 curl -i -H 'x-request-id: abc-123' localhost:3002/nope

@@ -79,19 +79,15 @@ describe("httpLogger", () => {
     expect(completion(lines())[0]?.correlationId).toBe(id);
   });
 
-  it("redacts the authorization, cookie and set-cookie headers", async () => {
+  it("logs only method, url and status, never headers", async () => {
     const { app, lines, raw } = setup();
     await request(app)
       .get("/login")
       .set("authorization", "Bearer secret")
       .set("cookie", "session=secret");
     const [done] = completion(lines());
-    expect(done).toMatchObject({
-      req: {
-        headers: { authorization: "[Redacted]", cookie: "[Redacted]" },
-      },
-      res: { headers: { "set-cookie": "[Redacted]" } },
-    });
+    expect(done?.req).toEqual({ method: "GET", url: "/login" });
+    expect(done?.res).toEqual({ statusCode: 200 });
     expect(raw.join("\n")).not.toContain("secret");
   });
 
@@ -101,6 +97,8 @@ describe("httpLogger", () => {
     const handler = lines().find((line) => line.msg === "handler line");
     const [done] = completion(lines());
     expect(handler).toMatchObject({ role: "user", userId: "u_1" });
+    expect(handler?.correlationId).toEqual(expect.any(String));
+    expect(handler).not.toHaveProperty("req");
     expect(done).toMatchObject({ role: "user", userId: "u_1" });
     const doneRaw = raw.find((line) => line.includes("responseTime")) ?? "";
     expect(doneRaw.match(/"correlationId"/g)).toHaveLength(1);
