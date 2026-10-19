@@ -1,12 +1,14 @@
 import {
+  DuplicateRecordError,
   decodeEvent,
   type EventMessage,
   type Logger,
   type PaymentEvent,
   paymentEventSchema,
+  type Repository,
 } from "@payment-be/shared";
 import { ZodError } from "zod";
-import type { Channel } from "./consumer.config.js";
+import { type Channel, type InboxRecord, inboxId } from "../inbox/index.js";
 
 export interface ConsumerMessage extends EventMessage {
   ack: () => void;
@@ -18,6 +20,7 @@ export interface ConsumerMessage extends EventMessage {
 
 export interface EventHandlerOptions {
   channel: Channel;
+  inbox: Pick<Repository<InboxRecord>, "get" | "insert">;
   logger: Logger;
   onEvent?: (event: PaymentEvent, logger: Logger) => Promise<void>;
 }
@@ -33,6 +36,7 @@ const invalidReason = (err: unknown) =>
 
 export function createEventHandler({
   channel,
+  inbox,
   logger,
   onEvent = () => Promise.resolve(),
 }: EventHandlerOptions): (msg: ConsumerMessage) => Promise<void> {
@@ -54,16 +58,46 @@ export function createEventHandler({
       eventId: event.eventId,
       userId: event.data.userId,
     });
-    try {
-      log.info(
-        { channel, paymentId: event.data.paymentId, type: event.type },
-        "event received"
-      );
-      await onEvent(event, log);
+    const id = inboxId(channel, event.eventId);
+    const skipDuplicate = () => {
+      log.info({ channel, type: event.type }, "duplicate skipped");
       msg.ack();
+    };
+    let duplicate: boolean;
+    try {
+      duplicate = (await inbox.get(id)) !== undefined;
+      if (!duplicate) {
+        log.info(
+          { channel, paymentId: event.data.paymentId, type: event.type },
+          "event received"
+        );
+        await onEvent(event, log);
+      }
     } catch (err) {
       log.error({ channel, err }, "event handling failed");
       msg.nak();
+      return;
     }
+    if (duplicate) {
+      skipDuplicate();
+      return;
+    }
+    try {
+      await inbox.insert({
+        channel,
+        eventId: event.eventId,
+        id,
+        processedAt: new Date().toISOString(),
+        type: event.type,
+      });
+    } catch (err) {
+      if (err instanceof DuplicateRecordError) {
+        skipDuplicate();
+        return;
+      }
+      // The work is done; a nak would redeliver at once and run it again in a loop while storage is failing.
+      log.error({ channel, err }, "marker write failed");
+    }
+    msg.ack();
   };
 }

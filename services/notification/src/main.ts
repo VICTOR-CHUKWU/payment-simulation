@@ -10,6 +10,7 @@ import {
   loadConfig,
   natsCheck,
   onShutdown,
+  openRepository,
   PAYMENTS_STREAM,
   startConsumer,
 } from "@payment-be/shared";
@@ -21,6 +22,7 @@ import {
   consumersCheck,
   createEventHandler,
 } from "./consumer/index.js";
+import { inboxRecordSchema } from "./inbox/index.js";
 
 const config = loadConfig(notificationConfigSchema);
 
@@ -34,6 +36,16 @@ const logger = createLogger({
 
 try {
   const nc = await connectNats({ name: "notification", url: config.NATS_URL });
+  const {
+    check,
+    close,
+    repository: inbox,
+  } = await openRepository({
+    config,
+    logger,
+    name: "inbox",
+    schema: inboxRecordSchema,
+  });
   const jsm = await jetstreamManager(nc);
   const stream = await ensureStream(jsm, PAYMENTS_STREAM);
   logger.info({ result: stream, stream: PAYMENTS_STREAM.name }, "stream ready");
@@ -52,7 +64,7 @@ try {
     CHANNELS.map((channel) =>
       startConsumer({
         durable: CHANNEL_CONSUMERS[channel].durable_name,
-        handle: createEventHandler({ channel, logger }),
+        handle: createEventHandler({ channel, inbox, logger }),
         js,
         logger,
         stream: PAYMENTS_STREAM.name,
@@ -61,7 +73,7 @@ try {
   );
   const server = await listen(
     createApp({
-      checks: [natsCheck(nc), consumersCheck(consumers)],
+      checks: [natsCheck(nc), consumersCheck(consumers), check],
       docs,
       logger,
     }),
@@ -74,7 +86,11 @@ try {
   onShutdown({
     logger,
     server,
-    tasks: [...consumers.map((consumer) => consumer.stop), () => drainNats(nc)],
+    tasks: [
+      ...consumers.map((consumer) => consumer.stop),
+      () => drainNats(nc),
+      close,
+    ],
   });
 } catch (err) {
   logger.fatal({ err }, "startup failed");
