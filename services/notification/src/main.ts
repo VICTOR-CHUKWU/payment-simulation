@@ -23,6 +23,10 @@ import {
   createEventHandler,
 } from "./consumer/index.js";
 import { inboxRecordSchema } from "./inbox/index.js";
+import {
+  createNotificationService,
+  notificationSchema,
+} from "./notification/index.js";
 
 const config = loadConfig(notificationConfigSchema);
 
@@ -36,16 +40,30 @@ const logger = createLogger({
 
 try {
   const nc = await connectNats({ name: "notification", url: config.NATS_URL });
-  const {
-    check,
-    close,
-    repository: inbox,
-  } = await openRepository({
+  const inbox = await openRepository({
     config,
     logger,
     name: "inbox",
     schema: inboxRecordSchema,
   });
+  const notifications = await openRepository({
+    config,
+    logger,
+    name: "notifications",
+    schema: notificationSchema,
+  });
+  const service = createNotificationService(notifications.repository);
+  // openRepository names every check "storage", and readiness keys checks by name.
+  const storage = {
+    check: async () => {
+      const results = await Promise.all([
+        inbox.check.check(),
+        notifications.check.check(),
+      ]);
+      return results.every((ok) => ok === true);
+    },
+    name: "storage",
+  };
   const jsm = await jetstreamManager(nc);
   const stream = await ensureStream(jsm, PAYMENTS_STREAM);
   logger.info({ result: stream, stream: PAYMENTS_STREAM.name }, "stream ready");
@@ -64,7 +82,14 @@ try {
     CHANNELS.map((channel) =>
       startConsumer({
         durable: CHANNEL_CONSUMERS[channel].durable_name,
-        handle: createEventHandler({ channel, inbox, logger }),
+        handle: createEventHandler({
+          channel,
+          inbox: inbox.repository,
+          logger,
+          ...(channel === "inapp"
+            ? { onEvent: (event) => service.record(event) }
+            : {}),
+        }),
         js,
         logger,
         stream: PAYMENTS_STREAM.name,
@@ -73,9 +98,11 @@ try {
   );
   const server = await listen(
     createApp({
-      checks: [natsCheck(nc), consumersCheck(consumers), check],
+      checks: [natsCheck(nc), consumersCheck(consumers), storage],
       docs,
+      jwtSecret: config.JWT_SECRET,
       logger,
+      notifications: notifications.repository,
     }),
     config.NOTIFICATION_PORT
   );
@@ -89,7 +116,8 @@ try {
     tasks: [
       ...consumers.map((consumer) => consumer.stop),
       () => drainNats(nc),
-      close,
+      inbox.close,
+      notifications.close,
     ],
   });
 } catch (err) {

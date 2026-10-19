@@ -78,7 +78,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 |---|---|---|---|
 | BE-05-01 | Notification service scaffold with separate durable consumers for in-app and email | done | [tasks/BE-05-01-notification-consumers.md](tasks/BE-05-01-notification-consumers.md) |
 | BE-05-02 | Idempotent event handling, deduped per channel (`eventId` + channel) | done | [tasks/BE-05-02-idempotent-event-handling.md](tasks/BE-05-02-idempotent-event-handling.md) |
-| BE-05-03 | In-app notifications: store, `GET /notifications` (own notifications only), mark as read | todo | — |
+| BE-05-03 | In-app notifications: store, `GET /notifications` (own notifications only), mark as read | done | [tasks/BE-05-03-inapp-notifications.md](tasks/BE-05-03-inapp-notifications.md) |
 | BE-05-04 | Email channel via SMTP (templates per payment event) | todo | — |
 | BE-05-05 | Email retries with backoff (bounded redelivery, short delays configurable for tests) | todo | — |
 | BE-05-06 | Dead-letter stream for exhausted emails, with inspect and replay (admin only) | todo | — |

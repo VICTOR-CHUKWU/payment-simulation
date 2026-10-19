@@ -13,6 +13,10 @@ import {
 } from "@payment-be/shared";
 import type { Channel, InboxRecord } from "../inbox/index.js";
 import {
+  createNotificationService,
+  type Notification,
+} from "../notification/index.js";
+import {
   type ConsumerMessage,
   createEventHandler,
   type EventHandlerOptions,
@@ -339,5 +343,18 @@ describe("per-channel dedupe", () => {
     await handle(msg);
     expect(actions).toEqual(["term"]);
     expect(await inbox.get(`inapp:${event.eventId}`)).toBeUndefined();
+  });
+
+  it("finishes a redelivery after a crash between the notification and the marker", async () => {
+    const notifications = createMemoryRepository<Notification>();
+    const service = createNotificationService(notifications);
+    const event = created();
+    await service.record(event);
+    const { handle, inbox } = setup((received) => service.record(received));
+    const { actions, msg } = stubMessage(event);
+    await handle(msg);
+    expect(actions).toEqual(["ack"]);
+    expect(await inbox.get(`inapp:${event.eventId}`)).toBeDefined();
+    expect(await notifications.find()).toHaveLength(1);
   });
 });

@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. Payment events and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. Email notifications are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -71,7 +71,7 @@ How the notification service consumes:
 - A consumer created for the first time reads from the start of the stream, so events published before `notification` first started are not lost. After that, each consumer continues from its last ack.
 - Each message is checked against the event schema. A valid event is logged, handled and acked; one the channel has already processed is acked without being handled again. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered.
 - Each channel records an event as processed (in its inbox) only after its work succeeds, and skips it on any later delivery, such as a redelivery, a replay from a recreated consumer or a late outbox republish. The two channels track this separately, so one channel's record never hides an event from the other. Handling is at least once: if the service stops after the work but before the record is saved, the event is handled again.
-- For now the handlers only log events. Storing in-app notifications and sending email arrive with BE-05-03 and BE-05-04.
+- The in-app handler stores a notification for every event except `payment.processing`, which follows `payment.created` within milliseconds. Each notification is keyed by the event's `eventId`, so an event handled again after a crash still leaves one notification. The email handler only logs events for now; sending email arrives with BE-05-04.
 
 ## Tech stack
 
@@ -131,7 +131,7 @@ A service stops at startup with a clear error if an environment variable is inva
 | payment | 3002 | `/health/live` | `/health/ready` |
 | notification | 3003 | `/health/live` | `/health/ready` |
 
-Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, `payment` reports `nats` and `storage`, and `notification` reports `nats`, `consumers` and `storage`; `storage` fails if the data file can no longer be written, and `consumers` fails if either notification consumer's read loop has ended, for example after the NATS connection closed for good. A consumer deleted on the server does not end the loop: the service logs a warning and keeps retrying until it is recreated (a restart recreates it).
+Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, `payment` reports `nats` and `storage`, and `notification` reports `nats`, `consumers` and `storage`; `storage` fails if the data file can no longer be written (for `notification`, if either `inbox.json` or `notifications.json` can no longer be written), and `consumers` fails if either notification consumer's read loop has ended, for example after the NATS connection closed for good. A consumer deleted on the server does not end the loop: the service logs a warning and keeps retrying until it is recreated (a restart recreates it).
 
 ```sh
 curl -i localhost:3002/health/ready
@@ -139,7 +139,7 @@ curl -i localhost:3002/health/ready
 
 ### Storage and demo accounts
 
-Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. `auth` stores users in `services/auth/data/users.json`, `payment` stores payments in `services/payment/data/payments.json`, and `notification` stores which events each channel has processed in `services/notification/data/inbox.json`.
+Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. `auth` stores users in `services/auth/data/users.json`, `payment` stores payments in `services/payment/data/payments.json`, and `notification` stores which events each channel has processed in `services/notification/data/inbox.json` and in-app notifications in `services/notification/data/notifications.json`.
 
 On every start, `auth` creates these accounts if their emails are not stored yet. An existing account is never changed, so a password you change stays changed.
 
@@ -296,6 +296,31 @@ curl -i -X PATCH localhost:3002/payments/<id>/status \
   -H "authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"status":"cancelled"}'
+```
+
+### Notification endpoints
+
+Every notification endpoint needs `Authorization: Bearer <accessToken>`, using a token from `POST /auth/login`.
+
+| Method | Path | Query | Success | Errors |
+|---|---|---|---|---|
+| `GET` | `/notifications` | `page?`, `limit?`, `unread?` | `200` with `data`: notifications `{ id, userId, type, paymentId, amount, currency, title, message, readAt, createdAt }` newest first, and `meta` | `400`, `401` |
+| `PATCH` | `/notifications/:id/read` | — | `200` with `data`: the notification, and the message `Notification marked as read` | `400`, `401`, `404` |
+| `PATCH` | `/notifications/read` | — | `200` with `data: { updated }` and the message `Notifications marked as read` | `401` |
+
+- Every user sees only their own notifications, admins included. Another user's notification returns `404 notification-not-found`, the same as an unknown ID. An ID that is not a UUID returns `400`.
+- A notification is stored for `payment.created`, `payment.succeeded`, `payment.failed` and `payment.cancelled`. `id` is the event's `eventId`, `createdAt` is when the event happened, and `readAt` is `null` until read. `amount` is in minor units; `message` shows it formatted, such as `Your payment of NGN 1,500.00 succeeded.`
+- `page` starts at 1 and `limit` defaults to 20, up to 100. A page past the end returns an empty `data` with the usual `meta`.
+- `unread=true` returns only unread notifications, so `meta.total` is the unread count. `unread=false` returns only read ones. Leave it out for both. Any other value, or an unknown query parameter, returns `400`.
+- Marking a notification that is already read returns `200` and keeps its first `readAt`.
+- `PATCH /notifications/read` returns how many notifications this request marked. Neither `PATCH` takes a body.
+
+```sh
+curl -i 'localhost:3003/notifications?unread=true' -H "authorization: Bearer $TOKEN"
+
+curl -i -X PATCH localhost:3003/notifications/<id>/read -H "authorization: Bearer $TOKEN"
+
+curl -i -X PATCH localhost:3003/notifications/read -H "authorization: Bearer $TOKEN"
 ```
 
 ### Errors
