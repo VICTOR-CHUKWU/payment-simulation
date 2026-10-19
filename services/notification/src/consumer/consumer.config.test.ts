@@ -1,7 +1,7 @@
 import { AckPolicy, DeliverPolicy } from "@payment-be/shared";
+import { CHANNELS } from "../inbox/index.js";
 import {
   CHANNEL_CONSUMERS,
-  CHANNELS,
   EMAIL_CONSUMER,
   INAPP_CONSUMER,
 } from "./consumer.config.js";

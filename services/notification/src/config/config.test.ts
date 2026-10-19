@@ -27,6 +27,13 @@ describe("notificationConfigSchema", () => {
     });
   });
 
+  it("applies the storage defaults", () => {
+    expect(load({ NODE_ENV: "development" })).toMatchObject({
+      DATA_DIR: "data",
+      STORAGE_DRIVER: "file",
+    });
+  });
+
   it("requires JWT_SECRET in production and names it", () => {
     expect(() => load({ NODE_ENV: "production" })).toThrow(JWT_SECRET_NAMED);
   });

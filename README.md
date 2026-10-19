@@ -69,7 +69,8 @@ How the notification service consumes:
 
 - Two durable pull consumers read `PAYMENTS`, one per channel: `notification-inapp` and `notification-email`. Both take every event (`payment.>`) and ack each message explicitly.
 - A consumer created for the first time reads from the start of the stream, so events published before `notification` first started are not lost. After that, each consumer continues from its last ack.
-- Each message is checked against the event schema. A valid event is logged and acked. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered.
+- Each message is checked against the event schema. A valid event is logged, handled and acked; one the channel has already processed is acked without being handled again. A message that is not valid JSON or does not match the schema is terminated, so it is never redelivered, and a warning is logged without its contents. If handling a valid event fails, the message is nak'd and redelivered.
+- Each channel records an event as processed (in its inbox) only after its work succeeds, and skips it on any later delivery, such as a redelivery, a replay from a recreated consumer or a late outbox republish. The two channels track this separately, so one channel's record never hides an event from the other. Handling is at least once: if the service stops after the work but before the record is saved, the event is handled again.
 - For now the handlers only log events. Storing in-app notifications and sending email arrive with BE-05-03 and BE-05-04.
 
 ## Tech stack
@@ -120,7 +121,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. `notification` then does the same for its two consumers and starts reading from them. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. The same applies to a notification consumer whose settings NATS refuses to change, such as its start point. `payment` then publishes any events left waiting from its previous run. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor and then the outbox relay (payment), stops reading from its consumers (notification), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth`, `payment` and `notification`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. On start, `payment` and `notification` create the `PAYMENTS` stream if it is missing, or update it to match the expected settings. `notification` then does the same for its two consumers and starts reading from them. If NATS refuses the change (for example a different storage type left over from an older setup), the service stops with the server's error; `pnpm infra:reset` clears the old stream locally. The same applies to a notification consumer whose settings NATS refuses to change, such as its start point. `payment` then publishes any events left waiting from its previous run. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor and then the outbox relay (payment), stops reading from its consumers (notification), drains NATS (payment and notification), closes its storage (auth, payment and notification) and exits.
 
 ### Health checks
 
@@ -130,7 +131,7 @@ A service stops at startup with a clear error if an environment variable is inva
 | payment | 3002 | `/health/live` | `/health/ready` |
 | notification | 3003 | `/health/live` | `/health/ready` |
 
-Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, `payment` reports `nats` and `storage`, and `notification` reports `nats` and `consumers`; `storage` fails if the data file can no longer be written, and `consumers` fails if either notification consumer's read loop has ended, for example after the NATS connection closed for good. A consumer deleted on the server does not end the loop: the service logs a warning and keeps retrying until it is recreated (a restart recreates it).
+Liveness always returns `200` while the process is up. Readiness returns `200` when every dependency check passes and `503` when one fails, for example while NATS is down. The response lists each check as `ok` or `fail`. `auth` reports `storage`, `payment` reports `nats` and `storage`, and `notification` reports `nats`, `consumers` and `storage`; `storage` fails if the data file can no longer be written, and `consumers` fails if either notification consumer's read loop has ended, for example after the NATS connection closed for good. A consumer deleted on the server does not end the loop: the service logs a warning and keeps retrying until it is recreated (a restart recreates it).
 
 ```sh
 curl -i localhost:3002/health/ready
@@ -138,7 +139,7 @@ curl -i localhost:3002/health/ready
 
 ### Storage and demo accounts
 
-Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. `auth` stores users in `services/auth/data/users.json` and `payment` stores payments in `services/payment/data/payments.json`.
+Each service keeps its own data. `STORAGE_DRIVER=file` (the default) stores it as JSON in `services/<service>/data/` (set by `DATA_DIR`, relative to the service folder), so it survives restarts. `STORAGE_DRIVER=memory` keeps it in memory only. Delete the `data` folder to start fresh. `auth` stores users in `services/auth/data/users.json`, `payment` stores payments in `services/payment/data/payments.json`, and `notification` stores which events each channel has processed in `services/notification/data/inbox.json`.
 
 On every start, `auth` creates these accounts if their emails are not stored yet. An existing account is never changed, so a password you change stays changed.
 

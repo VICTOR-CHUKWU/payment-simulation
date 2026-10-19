@@ -1,9 +1,8 @@
 // biome-ignore lint/performance/noBarrelFile: module entry point
+export { CHANNELS, type Channel } from "../inbox/index.js";
 export { consumersCheck } from "./consumer.check.js";
 export {
   CHANNEL_CONSUMERS,
-  CHANNELS,
-  type Channel,
   EMAIL_CONSUMER,
   INAPP_CONSUMER,
 } from "./consumer.config.js";

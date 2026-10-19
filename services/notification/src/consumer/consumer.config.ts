@@ -3,10 +3,7 @@ import {
   type ConsumerDefinition,
   DeliverPolicy,
 } from "@payment-be/shared";
-
-export const CHANNELS = ["inapp", "email"] as const;
-
-export type Channel = (typeof CHANNELS)[number];
+import type { Channel } from "../inbox/index.js";
 
 export const INAPP_CONSUMER = {
   ack_policy: AckPolicy.Explicit,
