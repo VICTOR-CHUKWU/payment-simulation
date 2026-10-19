@@ -11,6 +11,10 @@ import {
 import { createApp } from "./app.js";
 import { paymentConfigSchema } from "./config/index.js";
 import { paymentSchema } from "./payment/index.js";
+import {
+  createPaymentProcessor,
+  createSimulatedGateway,
+} from "./processor/index.js";
 
 const config = loadConfig(paymentConfigSchema);
 
@@ -44,7 +48,25 @@ try {
     { port: config.PAYMENT_PORT, ...(docs ? { docs: "/docs" } : {}) },
     "listening"
   );
-  onShutdown({ logger, server, tasks: [() => drainNats(nc), close] });
+  const processor = createPaymentProcessor({
+    concurrency: config.PROCESSOR_CONCURRENCY,
+    gateway: createSimulatedGateway({
+      failureRate: config.GATEWAY_FAILURE_RATE,
+      maxDelayMs: config.GATEWAY_MAX_DELAY_MS,
+      minDelayMs: config.GATEWAY_MIN_DELAY_MS,
+      timeoutRate: config.GATEWAY_TIMEOUT_RATE,
+    }),
+    logger,
+    payments: repository,
+    pollIntervalMs: config.PROCESSOR_POLL_INTERVAL_MS,
+    timeoutMs: config.GATEWAY_TIMEOUT_MS,
+  });
+  processor.start();
+  onShutdown({
+    logger,
+    server,
+    tasks: [processor.stop, () => drainNats(nc), close],
+  });
 } catch (err) {
   logger.fatal({ err }, "startup failed");
   process.exit(1);
