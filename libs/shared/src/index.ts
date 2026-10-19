@@ -69,6 +69,15 @@ export {
   problemResponses,
 } from "./openapi.js";
 export {
+  createPaymentEvent,
+  PAYMENT_EVENT_TYPES,
+  type PaymentEvent,
+  type PaymentEventData,
+  type PaymentEventType,
+  paymentEventDataSchema,
+  paymentEventSchema,
+} from "./payment-events.js";
+export {
   DuplicateRecordError,
   type NewRecord,
   RecordNotFoundError,
@@ -102,3 +111,11 @@ export {
   type StorageConfig,
   storageConfigSchema,
 } from "./storage.js";
+export {
+  type EnsureStreamResult,
+  ensureStream,
+  jetstreamManager,
+  PAYMENTS_STREAM,
+  type StreamDefinition,
+  type StreamManager,
+} from "./streams.js";

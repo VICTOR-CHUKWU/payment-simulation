@@ -2,11 +2,14 @@ import {
   connectNats,
   createLogger,
   drainNats,
+  ensureStream,
+  jetstreamManager,
   listen,
   loadConfig,
   natsCheck,
   onShutdown,
   openRepository,
+  PAYMENTS_STREAM,
 } from "@payment-be/shared";
 import { createApp } from "./app.js";
 import { paymentConfigSchema } from "./config/index.js";
@@ -28,6 +31,11 @@ const logger = createLogger({
 
 try {
   const nc = await connectNats({ name: "payment", url: config.NATS_URL });
+  const stream = await ensureStream(
+    await jetstreamManager(nc),
+    PAYMENTS_STREAM
+  );
+  logger.info({ result: stream, stream: PAYMENTS_STREAM.name }, "stream ready");
   const { check, close, repository } = await openRepository({
     config,
     logger,
