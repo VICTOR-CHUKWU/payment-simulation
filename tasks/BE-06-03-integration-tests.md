@@ -1,7 +1,7 @@
 # BE-06-03: Cross-service integration tests
 
 **Covers:** BE-06-03
-**Status:** todo
+**Status:** done
 
 ## Objective
 
@@ -103,6 +103,7 @@ All four were settled on 2026-10-19: the user chose the recommended option in ea
 
 - No `console.*`; the harness reports through the shared pino logger or Jest's own output. No comments unless essential.
 - No new runtime dependencies. `tsx` and `jose` are already in the workspace; if the harness needs anything else, stop and record why here first.
+  - Recorded during delivery: the root `package.json` gains `@payment-be/shared` (`workspace:*`) as a dev dependency, so the duplicate-delivery test can reach NATS through the shared lib's client. It is a workspace package, not a new external dependency.
 - No fixed `sleep` in tests: poll with a timeout.
 - Never log or print tokens.
 
@@ -136,6 +137,11 @@ None.
 ## Completion Criteria
 
 Every Completion Verification check passes, and BE-06-03 in `ROADMAP.md` is `done` and links to this file.
+
+## Delivery notes
+
+- Mailpit `v1.31.6` chaos is `PUT /api/v1/chaos` with `{"Recipient": {"ErrorCode": <code>, "Probability": <0-100>}}`, confirmed against the container before writing the helper.
+- nodemailer reports every refused recipient as `EENVELOPE`, including a temporary `451`, so `isPermanent` dead-lettered 4xx recipient errors at once instead of retrying them. Fixed in `services/notification/src/email/email.retry.ts`: the SMTP reply code decides first, and `EENVELOPE` without one stays permanent. Unit tests cover both cases.
 
 ## Follow-ups
 

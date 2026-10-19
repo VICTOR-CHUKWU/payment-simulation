@@ -11,6 +11,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.15
         version: 2.5.15
+      '@payment-be/shared':
+        specifier: workspace:*
+        version: link:libs/shared
       '@types/jest':
         specifier: 30.0.0
         version: 30.0.0

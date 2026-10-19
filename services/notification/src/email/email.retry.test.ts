@@ -25,6 +25,7 @@ describe("isPermanent", () => {
     [{ responseCode: 550 }],
     [{ responseCode: 554 }],
     [{ code: "EENVELOPE" }],
+    [{ code: "EENVELOPE", responseCode: 550 }],
   ])("is true for %o", (fields) => {
     expect(isPermanent(new EmailSendError(fields))).toBe(true);
   });
@@ -32,6 +33,7 @@ describe("isPermanent", () => {
   it.each([
     [{ responseCode: 421 }],
     [{ responseCode: 451 }],
+    [{ code: "EENVELOPE", responseCode: 451 }],
     [{ code: "ESOCKET" }],
     [{ code: "ETIMEDOUT" }],
     [{}],
