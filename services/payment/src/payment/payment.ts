@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { correlationIdSchema, outboxEntrySchema } from "./payment.outbox.js";
 
 export const CURRENCIES = {
   EUR: 2,
@@ -39,6 +40,7 @@ export const idempotencyKeySchema = z
 
 export const paymentFieldsSchema = z.object({
   amount: amountSchema,
+  correlationId: correlationIdSchema.optional(),
   createdAt: z.iso.datetime(),
   currency: currencySchema,
   description: z.string().min(1).max(140).optional(),
@@ -46,6 +48,7 @@ export const paymentFieldsSchema = z.object({
   failureReason: failureReasonSchema.optional(),
   id: z.uuid(),
   idempotencyKey: idempotencyKeySchema.optional(),
+  outbox: z.array(outboxEntrySchema).optional(),
   status: paymentStatusSchema,
   updatedAt: z.iso.datetime(),
   userId: z.uuid(),

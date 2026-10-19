@@ -101,6 +101,13 @@ describe("POST /payments", () => {
     expect(res.body.data).not.toHaveProperty("version");
     expect(await payments.get(res.body.data.id)).toEqual({
       ...res.body.data,
+      correlationId: res.headers["x-request-id"],
+      outbox: [
+        {
+          correlationId: res.headers["x-request-id"],
+          event: expect.objectContaining({ type: "payment.created" }),
+        },
+      ],
       version: 1,
     });
   });
@@ -644,5 +651,57 @@ describe("PATCH /payments/:id/status", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("invalid-status-transition");
+  });
+});
+
+describe("payment outbox over HTTP", () => {
+  const asAdmin = () =>
+    sign({ role: "admin", sub: "1d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a" });
+
+  it("keeps the outbox and correlation ID out of every response", async () => {
+    const { app } = setup();
+    const created = await create(app, valid, await sign());
+    const { id } = created.body.data;
+
+    const fetched = await request(app)
+      .get(`/payments/${id}`)
+      .set("authorization", `Bearer ${await sign()}`);
+    const patched = await request(app)
+      .patch(`/payments/${id}/status`)
+      .set("authorization", `Bearer ${await asAdmin()}`)
+      .send({ status: "cancelled" });
+
+    for (const res of [created, fetched, patched]) {
+      expect(res.body.data).not.toHaveProperty("outbox");
+      expect(res.body.data).not.toHaveProperty("correlationId");
+    }
+  });
+
+  it("stores the create request's ID and tags a PATCH event with its own", async () => {
+    const { app, payments } = setup();
+    const created = await request(app)
+      .post("/payments")
+      .set("authorization", `Bearer ${await sign()}`)
+      .set("x-request-id", "create-req-1")
+      .send(valid);
+    const { id } = created.body.data;
+
+    await request(app)
+      .patch(`/payments/${id}/status`)
+      .set("authorization", `Bearer ${await asAdmin()}`)
+      .set("x-request-id", "patch-req-1")
+      .send({ status: "cancelled" });
+
+    const stored = await payments.get(id);
+    expect(stored?.correlationId).toBe("create-req-1");
+    expect(
+      stored?.outbox?.map(({ correlationId, event }) => [
+        event.type,
+        correlationId,
+      ])
+    ).toEqual([
+      ["payment.created", "create-req-1"],
+      ["payment.cancelled", "patch-req-1"],
+    ]);
   });
 });

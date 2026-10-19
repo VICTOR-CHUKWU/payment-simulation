@@ -120,3 +120,44 @@ describe("paymentFieldsSchema", () => {
     });
   });
 });
+
+describe("paymentSchema outbox fields", () => {
+  const entry = {
+    correlationId: "req-1",
+    event: {
+      data: {
+        amount: 150_000,
+        currency: "NGN",
+        email: "ada@example.com",
+        paymentId: valid.id,
+        userId: valid.userId,
+      },
+      eventId: "5b1f0a2c-3d4e-4f56-8a7b-9c0d1e2f3a4b",
+      occurredAt: "2026-10-18T12:00:00.000Z",
+      type: "payment.created",
+    },
+  };
+
+  it("loads a stored payment written before the outbox existed", () => {
+    expect(paymentSchema.parse(valid)).toEqual(valid);
+  });
+
+  it("accepts a payment with a correlation ID and an outbox entry", () => {
+    const payment = { ...valid, correlationId: "req-1", outbox: [entry] };
+    expect(paymentSchema.parse(payment)).toEqual(payment);
+  });
+
+  it("rejects an outbox entry with an invalid event", () => {
+    const bad = { ...entry, event: { ...entry.event, type: "payment.lost" } };
+    expect(paymentSchema.safeParse({ ...valid, outbox: [bad] }).success).toBe(
+      false
+    );
+  });
+
+  it("rejects a correlation ID longer than 128 characters", () => {
+    expect(
+      paymentSchema.safeParse({ ...valid, correlationId: "r".repeat(129) })
+        .success
+    ).toBe(false);
+  });
+});

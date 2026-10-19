@@ -81,6 +81,15 @@ describe("payment app", () => {
     );
   });
 
+  it("keeps internal outbox fields out of the Payment schema", async () => {
+    const res = await request(app({ docs: true })).get("/docs/openapi.json");
+    const { properties } = res.body.components.schemas.Payment;
+    expect(properties).not.toHaveProperty("outbox");
+    expect(properties).not.toHaveProperty("correlationId");
+    expect(properties).not.toHaveProperty("idempotencyKey");
+    expect(properties).not.toHaveProperty("version");
+  });
+
   it("documents POST /payments with bearer auth and its errors", async () => {
     const res = await request(app({ docs: true })).get("/docs/openapi.json");
     const operation = res.body.paths["/payments"].post;

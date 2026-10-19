@@ -12,6 +12,7 @@ const FAILURE_RATE_NAMED = /GATEWAY_FAILURE_RATE/;
 const MAX_DELAY_NAMED = /GATEWAY_MAX_DELAY_MS/;
 const TIMEOUT_NAMED = /GATEWAY_TIMEOUT_MS/;
 const CONCURRENCY_NAMED = /PROCESSOR_CONCURRENCY/;
+const RELAY_INTERVAL_NAMED = /OUTBOX_RELAY_INTERVAL_MS/;
 
 const load = (env: Record<string, string>) =>
   loadConfig(paymentConfigSchema, env);
@@ -66,6 +67,22 @@ describe("paymentConfigSchema", () => {
       PROCESSOR_POLL_INTERVAL_MS: 1000,
     });
   });
+
+  it("defaults the outbox relay interval to 1000 ms and coerces it", () => {
+    expect(load({}).OUTBOX_RELAY_INTERVAL_MS).toBe(1000);
+    expect(
+      load({ OUTBOX_RELAY_INTERVAL_MS: "10" }).OUTBOX_RELAY_INTERVAL_MS
+    ).toBe(10);
+  });
+
+  it.each(["9", "1.5", "abc"])(
+    "rejects an outbox relay interval of %s and names it",
+    (value) => {
+      expect(() => load({ OUTBOX_RELAY_INTERVAL_MS: value })).toThrow(
+        RELAY_INTERVAL_NAMED
+      );
+    }
+  );
 
   it("coerces processor and gateway values from strings", () => {
     expect(

@@ -114,6 +114,8 @@ export {
 export {
   type EnsureStreamResult,
   ensureStream,
+  type JetStreamClient,
+  jetstream,
   jetstreamManager,
   PAYMENTS_STREAM,
   type StreamDefinition,
