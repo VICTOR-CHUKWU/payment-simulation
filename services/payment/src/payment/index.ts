@@ -26,6 +26,8 @@ export {
   paymentEnvelopeSchema,
   paymentIdParamsSchema,
   paymentResponseSchema,
+  type UpdatePaymentStatusBody,
+  updatePaymentStatusBodySchema,
 } from "./payment.schema.js";
 export {
   type CreatePaymentInput,
@@ -34,6 +36,7 @@ export {
   type PaymentCaller,
   type PaymentOwner,
   type PaymentService,
+  type StatusUpdateResult,
   toPaymentResponse,
 } from "./payment.service.js";
 export {

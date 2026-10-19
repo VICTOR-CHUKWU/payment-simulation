@@ -1,5 +1,10 @@
-import { AppError, createMemoryRepository } from "@payment-be/shared";
-import type { Payment } from "./payment.js";
+import {
+  AppError,
+  createMemoryRepository,
+  type Repository,
+  VersionConflictError,
+} from "@payment-be/shared";
+import type { Payment, PaymentStatus } from "./payment.js";
 import { createPaymentService } from "./payment.service.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -248,5 +253,165 @@ describe("createPaymentService.get", () => {
 
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({ code: "payment-not-found", status: 404 });
+  });
+});
+
+describe("createPaymentService.updateStatus", () => {
+  const later = new Date("2026-10-18T13:00:00.000Z");
+
+  async function seeded(status: PaymentStatus = "pending") {
+    const payments = createMemoryRepository<Payment>();
+    const stored = await payments.insert({
+      ...body,
+      createdAt: now().toISOString(),
+      email: owner.email,
+      id: "3f1c2b7a-9d4e-4a51-8c6b-2e7f0a9d1b34",
+      idempotencyKey: "order-42",
+      status,
+      ...(status === "failed" ? { failureReason: "Declined" } : {}),
+      updatedAt: now().toISOString(),
+      userId: owner.userId,
+    });
+    const service = createPaymentService(payments, { now: () => later });
+    return { payments, service, stored };
+  }
+
+  function conflicting(
+    payments: Repository<Payment>,
+    conflicts: number,
+    beforeConflict?: () => Promise<unknown>
+  ) {
+    let calls = 0;
+    const repository: Repository<Payment> = {
+      ...payments,
+      async update(id, expectedVersion, patch) {
+        calls += 1;
+        if (calls <= conflicts) {
+          await beforeConflict?.();
+          throw new VersionConflictError({ id });
+        }
+        return await payments.update(id, expectedVersion, patch);
+      },
+    };
+    return { calls: () => calls, repository };
+  }
+
+  it.each([
+    ["pending", "cancelled"],
+    ["processing", "succeeded"],
+  ] as const)("changes %s to %s", async (from, to) => {
+    const { payments, service, stored } = await seeded(from);
+
+    const result = await service.updateStatus(stored.id, { status: to });
+
+    expect(result.from).toBe(from);
+    expect(result.payment).toMatchObject({
+      status: to,
+      updatedAt: later.toISOString(),
+    });
+    expect(result.payment).not.toHaveProperty("version");
+    expect(result.payment).not.toHaveProperty("idempotencyKey");
+    expect(await payments.get(stored.id)).toMatchObject({
+      status: to,
+      version: 2,
+    });
+  });
+
+  it("stores the failure reason when marking a payment failed", async () => {
+    const { payments, service, stored } = await seeded("processing");
+
+    const { payment } = await service.updateStatus(stored.id, {
+      failureReason: "Card declined",
+      status: "failed",
+    });
+
+    expect(payment).toMatchObject({
+      failureReason: "Card declined",
+      status: "failed",
+    });
+    expect(payment.updatedAt).toBe(later.toISOString());
+    expect(await payments.get(stored.id)).toMatchObject({
+      failureReason: "Card declined",
+      version: 2,
+    });
+  });
+
+  it.each([
+    ["pending", "succeeded"],
+    ["succeeded", "cancelled"],
+    ["cancelled", "cancelled"],
+  ] as const)(
+    "rejects %s to %s and leaves the payment unchanged",
+    async (from, to) => {
+      const { payments, service, stored } = await seeded(from);
+
+      await expect(
+        service.updateStatus(stored.id, { status: to })
+      ).rejects.toMatchObject({
+        code: "invalid-status-transition",
+        status: 409,
+      });
+      expect(await payments.get(stored.id)).toEqual(stored);
+    }
+  );
+
+  it("throws payment-not-found for an unknown id", async () => {
+    const { service } = await seeded();
+
+    await expect(
+      service.updateStatus("9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d", {
+        status: "cancelled",
+      })
+    ).rejects.toMatchObject({ code: "payment-not-found", status: 404 });
+  });
+
+  it("re-reads and succeeds after a version conflict", async () => {
+    const { payments, stored } = await seeded();
+    const { calls, repository } = conflicting(payments, 1);
+    const service = createPaymentService(repository, { now: () => later });
+
+    const { payment } = await service.updateStatus(stored.id, {
+      status: "cancelled",
+    });
+
+    expect(payment.status).toBe("cancelled");
+    expect(calls()).toBe(2);
+  });
+
+  it("gives up with version-conflict after 3 attempts", async () => {
+    const { payments, stored } = await seeded();
+    const { calls, repository } = conflicting(payments, 3);
+    const service = createPaymentService(repository, { now: () => later });
+
+    const result = service.updateStatus(stored.id, { status: "cancelled" });
+
+    await expect(result).rejects.toBeInstanceOf(VersionConflictError);
+    expect(calls()).toBe(3);
+    expect(await payments.get(stored.id)).toEqual(stored);
+  });
+
+  it("reports the real status when another writer finished the payment first", async () => {
+    const { payments, stored } = await seeded("processing");
+    const { calls, repository } = conflicting(payments, 1, () =>
+      payments.update(stored.id, stored.version, {
+        status: "succeeded",
+        updatedAt: later.toISOString(),
+      })
+    );
+    const service = createPaymentService(repository, { now: () => later });
+
+    await expect(
+      service.updateStatus(stored.id, {
+        failureReason: "Timed out",
+        status: "failed",
+      })
+    ).rejects.toMatchObject({
+      code: "invalid-status-transition",
+      detail: "Cannot change payment status from succeeded to failed.",
+    });
+    expect(calls()).toBe(1);
+    expect(await payments.get(stored.id)).toMatchObject({
+      status: "succeeded",
+    });
   });
 });

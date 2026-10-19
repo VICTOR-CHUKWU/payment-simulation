@@ -61,8 +61,8 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-03-02 | `POST /payments` — create payment with validation | done | [tasks/BE-03-02-create-payment.md](tasks/BE-03-02-create-payment.md) |
 | BE-03-07 | Idempotency keys on payment creation | done | [tasks/BE-03-07-idempotency-keys.md](tasks/BE-03-07-idempotency-keys.md) |
 | BE-03-03 | `GET /payments/:id` — retrieve payment | done | [tasks/BE-03-03-get-payment.md](tasks/BE-03-03-get-payment.md) |
-| BE-03-04 | `PATCH /payments/:id/status` — update status, enforcing transitions atomically | todo | — |
-| BE-03-06 | Payment status PATCH is admin-only (read ownership shipped in BE-03-03) | todo | — |
+| BE-03-04 | `PATCH /payments/:id/status` — update status, enforcing transitions atomically | done | [tasks/BE-03-04-update-payment-status.md](tasks/BE-03-04-update-payment-status.md) |
+| BE-03-06 | Payment status PATCH is admin-only (read ownership shipped in BE-03-03) | done | [tasks/BE-03-04-update-payment-status.md](tasks/BE-03-04-update-payment-status.md) |
 | BE-03-05 | Simulated gateway and background processor (delay, random failure, timeouts, resumes in-flight payments after restart) | todo | — |
 
 ## Phase 4 — Messaging (NATS)

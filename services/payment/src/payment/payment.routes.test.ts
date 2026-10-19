@@ -14,6 +14,7 @@ const SECRET = "s".repeat(32);
 const PROBLEM_JSON = /^application\/problem\+json/;
 const KEY_REUSED_TYPE = /idempotency-key-reused$/;
 const NOT_FOUND_TYPE = /payment-not-found$/;
+const INVALID_TRANSITION_TYPE = /invalid-status-transition$/;
 
 const owner = {
   email: "ada@example.com",
@@ -434,5 +435,214 @@ describe("GET /payments/:id", () => {
 
     expect(res.status).toBe(401);
     expect(res.body.code).toBe("unauthorized");
+  });
+});
+
+describe("PATCH /payments/:id/status", () => {
+  const admin = "1d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a";
+
+  async function stored(status: Payment["status"] = "pending") {
+    const ctx = setup();
+    const created = await create(ctx.app, valid, await sign());
+    const { id } = created.body.data;
+    if (status !== "pending") {
+      await ctx.payments.update(id, 1, { status });
+    }
+    return { ...ctx, id };
+  }
+
+  async function patch(
+    app: ReturnType<typeof setup>["app"],
+    id: string,
+    body: unknown,
+    token?: string
+  ) {
+    const req = request(app).patch(`/payments/${id}/status`);
+    if (token !== undefined) {
+      req.set("authorization", `Bearer ${token}`);
+    }
+    return await req.send(body as object);
+  }
+
+  const asAdmin = () => sign({ role: "admin", sub: admin });
+
+  it("lets an admin cancel a pending payment", async () => {
+    const { app, id, raw } = await stored();
+
+    const res = await patch(app, id, { status: "cancelled" }, await asAdmin());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      data: expect.objectContaining({ id, status: "cancelled" }),
+      message: "Payment status updated",
+      status: 200,
+      success: true,
+    });
+    expect(res.body.data).not.toHaveProperty("version");
+    expect(res.body.data).not.toHaveProperty("idempotencyKey");
+    const fetched = await request(app)
+      .get(`/payments/${id}`)
+      .set("authorization", `Bearer ${await sign()}`);
+    expect(fetched.body.data).toEqual(res.body.data);
+    const line = raw
+      .map((entry) => JSON.parse(entry))
+      .find((entry) => entry.msg === "payment status updated");
+    expect(line).toMatchObject({
+      from: "pending",
+      paymentId: id,
+      to: "cancelled",
+    });
+    expect(raw.join("\n")).not.toContain(owner.email);
+  });
+
+  it("lets an admin mark a processing payment failed with a reason", async () => {
+    const { app, id } = await stored("processing");
+
+    const res = await patch(
+      app,
+      id,
+      { failureReason: "Card declined", status: "failed" },
+      await asAdmin()
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      failureReason: "Card declined",
+      status: "failed",
+    });
+  });
+
+  it("lets an admin mark a processing payment succeeded", async () => {
+    const { app, id } = await stored("processing");
+
+    const res = await patch(app, id, { status: "succeeded" }, await asAdmin());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe("succeeded");
+  });
+
+  it("returns 403 to a user, even the payment's owner", async () => {
+    const { app, id, payments } = await stored();
+    const before = await payments.get(id);
+
+    const res = await patch(app, id, { status: "cancelled" }, await sign());
+
+    expect(res.status).toBe(403);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("forbidden");
+    expect(await payments.get(id)).toEqual(before);
+  });
+
+  it("returns 403 to a user before reading a malformed body", async () => {
+    const { app, id } = await stored();
+
+    const res = await request(app)
+      .patch(`/payments/${id}/status`)
+      .set("authorization", `Bearer ${await sign()}`)
+      .set("content-type", "application/json")
+      .send("{");
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 401 without a token", async () => {
+    const { app, id } = await stored();
+
+    const res = await patch(app, id, { status: "cancelled" });
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("unauthorized");
+  });
+
+  it("rejects an ID that is not a UUID", async () => {
+    const { app } = setup();
+
+    const res = await patch(
+      app,
+      "not-a-uuid",
+      { status: "cancelled" },
+      await asAdmin()
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual([
+      expect.objectContaining({ pointer: "/id" }),
+    ]);
+  });
+
+  it.each([
+    ["processing", { status: "processing" }, "/status"],
+    ["pending", { status: "pending" }, "/status"],
+    ["an unknown status", { status: "refunded" }, "/status"],
+    ["a missing status", {}, "/status"],
+    ["an unknown field", { amount: 1, status: "cancelled" }, ""],
+    ["failed without a reason", { status: "failed" }, "/failureReason"],
+    [
+      "cancelled with a reason",
+      { failureReason: "Nope", status: "cancelled" },
+      "/failureReason",
+    ],
+    [
+      "an empty reason",
+      { failureReason: "", status: "failed" },
+      "/failureReason",
+    ],
+    [
+      "a 201-character reason",
+      { failureReason: "x".repeat(201), status: "failed" },
+      "/failureReason",
+    ],
+  ])("returns 400 for %s", async (_label, body, pointer) => {
+    const { app, id, payments } = await stored("processing");
+    const before = await payments.get(id);
+
+    const res = await patch(app, id, body, await asAdmin());
+
+    expect(res.status).toBe(400);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("validation-error");
+    expect(res.body.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ pointer })])
+    );
+    expect(await payments.get(id)).toEqual(before);
+  });
+
+  it("returns 404 for an unknown payment", async () => {
+    const { app } = setup();
+
+    const res = await patch(
+      app,
+      randomUUID(),
+      { status: "cancelled" },
+      await asAdmin()
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe("payment-not-found");
+  });
+
+  it("returns 409 for a transition the current status does not allow", async () => {
+    const { app, id } = await stored();
+
+    const res = await patch(app, id, { status: "succeeded" }, await asAdmin());
+
+    expect(res.status).toBe(409);
+    expect(res.headers["content-type"]).toMatch(PROBLEM_JSON);
+    expect(res.body.code).toBe("invalid-status-transition");
+    expect(res.body.type).toMatch(INVALID_TRANSITION_TYPE);
+    expect(res.body.detail).toBe(
+      "Cannot change payment status from pending to succeeded."
+    );
+  });
+
+  it("returns 409 when cancelling twice", async () => {
+    const { app, id } = await stored();
+    const token = await asAdmin();
+    await patch(app, id, { status: "cancelled" }, token);
+
+    const res = await patch(app, id, { status: "cancelled" }, token);
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("invalid-status-transition");
   });
 });
