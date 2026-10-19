@@ -63,7 +63,7 @@ Source requirements: `~/Downloads/Node js assessment.xlsx` (Node.js Microservice
 | BE-03-03 | `GET /payments/:id` — retrieve payment | done | [tasks/BE-03-03-get-payment.md](tasks/BE-03-03-get-payment.md) |
 | BE-03-04 | `PATCH /payments/:id/status` — update status, enforcing transitions atomically | done | [tasks/BE-03-04-update-payment-status.md](tasks/BE-03-04-update-payment-status.md) |
 | BE-03-06 | Payment status PATCH is admin-only (read ownership shipped in BE-03-03) | done | [tasks/BE-03-04-update-payment-status.md](tasks/BE-03-04-update-payment-status.md) |
-| BE-03-05 | Simulated gateway and background processor (delay, random failure, timeouts, resumes in-flight payments after restart) | todo | — |
+| BE-03-05 | Simulated gateway and background processor (delay, random failure, timeouts, resumes in-flight payments after restart) | done | [tasks/BE-03-05-payment-processor.md](tasks/BE-03-05-payment-processor.md) |
 
 ## Phase 4 — Messaging (NATS)
 

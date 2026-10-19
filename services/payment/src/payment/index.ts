@@ -46,3 +46,7 @@ export {
   PAYMENT_TRANSITIONS,
   statusChange,
 } from "./payment.status.js";
+export {
+  type TransitionResult,
+  transitionPayment,
+} from "./payment.transition.js";

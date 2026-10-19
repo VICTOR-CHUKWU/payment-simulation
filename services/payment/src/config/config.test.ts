@@ -8,6 +8,10 @@ import { paymentConfigSchema } from "./config.js";
 
 const JWT_SECRET_NAMED = /JWT_SECRET/;
 const STORAGE_DRIVER_NAMED = /STORAGE_DRIVER/;
+const FAILURE_RATE_NAMED = /GATEWAY_FAILURE_RATE/;
+const MAX_DELAY_NAMED = /GATEWAY_MAX_DELAY_MS/;
+const TIMEOUT_NAMED = /GATEWAY_TIMEOUT_MS/;
+const CONCURRENCY_NAMED = /PROCESSOR_CONCURRENCY/;
 
 const load = (env: Record<string, string>) =>
   loadConfig(paymentConfigSchema, env);
@@ -50,4 +54,66 @@ describe("paymentConfigSchema", () => {
       JWT_SECRET: secret,
     });
   });
+
+  it("applies the processor and gateway defaults", () => {
+    expect(load({})).toMatchObject({
+      GATEWAY_FAILURE_RATE: 0.2,
+      GATEWAY_MAX_DELAY_MS: 5000,
+      GATEWAY_MIN_DELAY_MS: 1000,
+      GATEWAY_TIMEOUT_MS: 10_000,
+      GATEWAY_TIMEOUT_RATE: 0.05,
+      PROCESSOR_CONCURRENCY: 5,
+      PROCESSOR_POLL_INTERVAL_MS: 1000,
+    });
+  });
+
+  it("coerces processor and gateway values from strings", () => {
+    expect(
+      load({
+        GATEWAY_FAILURE_RATE: "0.5",
+        GATEWAY_MAX_DELAY_MS: "200",
+        GATEWAY_MIN_DELAY_MS: "100",
+        GATEWAY_TIMEOUT_MS: "300",
+        GATEWAY_TIMEOUT_RATE: "1",
+        PROCESSOR_CONCURRENCY: "2",
+        PROCESSOR_POLL_INTERVAL_MS: "50",
+      })
+    ).toMatchObject({
+      GATEWAY_FAILURE_RATE: 0.5,
+      GATEWAY_MAX_DELAY_MS: 200,
+      GATEWAY_MIN_DELAY_MS: 100,
+      GATEWAY_TIMEOUT_MS: 300,
+      GATEWAY_TIMEOUT_RATE: 1,
+      PROCESSOR_CONCURRENCY: 2,
+      PROCESSOR_POLL_INTERVAL_MS: 50,
+    });
+  });
+
+  it.each(["-0.1", "1.5", "abc"])(
+    "rejects a failure rate of %s and names it",
+    (value) => {
+      expect(() => load({ GATEWAY_FAILURE_RATE: value })).toThrow(
+        FAILURE_RATE_NAMED
+      );
+    }
+  );
+
+  it("rejects a concurrency below 1 and names it", () => {
+    expect(() => load({ PROCESSOR_CONCURRENCY: "0" })).toThrow(
+      CONCURRENCY_NAMED
+    );
+  });
+
+  it("rejects a minimum delay above the maximum and names the maximum", () => {
+    expect(() =>
+      load({ GATEWAY_MAX_DELAY_MS: "100", GATEWAY_MIN_DELAY_MS: "200" })
+    ).toThrow(MAX_DELAY_NAMED);
+  });
+
+  it.each(["5000", "4000"])(
+    "rejects a timeout of %s that is not above the maximum delay",
+    (value) => {
+      expect(() => load({ GATEWAY_TIMEOUT_MS: value })).toThrow(TIMEOUT_NAMED);
+    }
+  );
 });

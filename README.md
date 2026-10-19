@@ -2,7 +2,7 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments and serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`. Background processing and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. Payment events and the notification service are not implemented yet. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
 
 ## The brief
 
@@ -35,6 +35,13 @@ Services communicate through NATS JetStream. Each service owns its data, stored 
 
 A payment that is still `pending` can be cancelled instead. `succeeded`, `failed` and `cancelled` are final, and any status change outside this flow is rejected with `409 invalid-status-transition`.
 
+How the processor behaves:
+
+- It checks for work every `PROCESSOR_POLL_INTERVAL_MS`, so a new payment can wait up to one interval before it is claimed. It works on the oldest payments first, at most `PROCESSOR_CONCURRENCY` at a time.
+- The simulated gateway answers after a random delay between `GATEWAY_MIN_DELAY_MS` and `GATEWAY_MAX_DELAY_MS`, and declines a share of payments (`GATEWAY_FAILURE_RATE`) with a reason such as `Card declined`. On a share of calls (`GATEWAY_TIMEOUT_RATE`) it never answers. If no answer arrives within `GATEWAY_TIMEOUT_MS`, the payment becomes `failed` with `failureReason` `Gateway timed out`.
+- On shutdown the processor stops first and abandons any gateway call still waiting, without recording a result. Those payments stay `processing`. On the next start, and whenever a result could not be saved, they are sent to the gateway again, with the payment ID as the idempotency key a real gateway would use.
+- An admin's `PATCH /payments/:id/status` to `succeeded` or `failed` races the processor for a `processing` payment. Whichever change is saved first wins: the other gets `409 invalid-status-transition` (the admin) or is dropped and logged as `payment already settled` (the processor).
+
 ## Tech stack
 
 Node.js 24, TypeScript, Express, NATS JetStream, Zod, pino, Jest and supertest, Swagger UI, Biome (Ultracite), pnpm workspaces, docker-compose for local infrastructure (NATS and Mailpit).
@@ -62,6 +69,17 @@ pnpm dev
 
 `LOGIN_RATE_LIMIT_MAX` (default `10`) and `LOGIN_RATE_LIMIT_WINDOW_MS` (default `900000`, 15 minutes) set how many failed logins `auth` allows per client IP in each window (see [Auth endpoints](#auth-endpoints)).
 
+The payment processor and simulated gateway (see [Payment flow](#payment-flow)) read these:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PROCESSOR_POLL_INTERVAL_MS` | `1000` | Time between checks for payments to process (at least `10`) |
+| `PROCESSOR_CONCURRENCY` | `5` | Most payments processed at once |
+| `GATEWAY_MIN_DELAY_MS`, `GATEWAY_MAX_DELAY_MS` | `1000`, `5000` | Range of the gateway's random answer delay; the minimum cannot exceed the maximum |
+| `GATEWAY_FAILURE_RATE` | `0.2` | Share of answers that decline the payment, from `0` to `1` |
+| `GATEWAY_TIMEOUT_RATE` | `0.05` | Share of calls the gateway never answers, from `0` to `1` |
+| `GATEWAY_TIMEOUT_MS` | `10000` | How long the processor waits before failing the payment; must be greater than `GATEWAY_MAX_DELAY_MS` |
+
 `pnpm infra:up` starts NATS (with JetStream) and Mailpit in Docker and returns once both are healthy.
 
 `pnpm dev` starts all three services in watch mode. To run the compiled build instead:
@@ -71,7 +89,7 @@ pnpm build
 pnpm start
 ```
 
-A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, drains NATS (payment and notification), closes its storage (auth and payment) and exits.
+A service stops at startup with a clear error if an environment variable is invalid, NATS is unreachable, or (for `auth` and `payment`) its data file is invalid or locked by another running process. The error names the variable but never shows its value. Once a service is running, it reconnects to NATS on its own if the connection drops. On SIGTERM or SIGINT it stops taking new connections, stops the payment processor (payment), drains NATS (payment and notification), closes its storage (auth and payment) and exits.
 
 ### Health checks
 
