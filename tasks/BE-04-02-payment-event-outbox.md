@@ -252,6 +252,8 @@ Every Completion Verification check passes, and the BE-04-02 row in `ROADMAP.md`
 
 ## Follow-ups
 
+- Known limitation (recorded 2026-10-19 for the README): because the relay stops at a payment's first failed publish, an event NATS rejected for good (an error that repeats on every try, not an outage) would block that payment's later events, retried and logged as `event publish failed` on every sweep. No such error is known, since events are validated before they are stored. A real system would cap attempts per event and dead-letter it.
+
 - BE-05-02: consumers must dedupe by `eventId` per channel, because a republish after the 2-minute window is stored twice.
 - BE-06-03: the integration tests should cover a duplicate publish and a NATS outage during publishing.
 - BE-06-06: describe the outbox and its at-least-once delivery in the failure-handling section.

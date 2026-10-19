@@ -2,7 +2,12 @@
 
 A payment processing simulation built as Node.js microservices. Users create payments, a simulated gateway processes them in the background, and a notification service tells users the result in the app and by email.
 
-> **Status:** in progress. The monorepo scaffold, local infrastructure (NATS, Mailpit) and shared config, event and NATS helpers are in place. Each service starts an HTTP server with health endpoints, structured request logging, graceful shutdown and Swagger UI in development. The auth service stores users, seeds demo accounts, and serves register and login with JWT access tokens. The payment service stores payments, serves `POST /payments`, `GET /payments/:id` and the admin-only `PATCH /payments/:id/status`, and settles new payments in the background through a simulated gateway. The payment service publishes lifecycle events to NATS JetStream. The notification service consumes them, stores in-app notifications and serves them through `GET /notifications` and mark-as-read endpoints. It also emails the payment's owner when a payment is received, succeeds, fails or is cancelled, through SMTP (Mailpit locally), retrying failed sends with growing delays and moving emails that still fail to a dead-letter queue that admins can inspect and replay. Progress is tracked in [ROADMAP.md](ROADMAP.md). Setup, run, API and testing instructions will be added as each part lands.
+## What it does
+
+- **Auth:** register and log in, and get a JWT. Two demo accounts are seeded: an admin and a normal user.
+- **Payments:** a user creates a payment (`POST /payments`) and reads it back (`GET /payments/:id`). A background processor sends it to a simulated gateway, which approves or declines it after a random delay. An admin can cancel or settle a payment (`PATCH /payments/:id/status`).
+- **Notifications:** every status change is published to NATS JetStream. The notification service stores an in-app notification for the payment's owner and emails them through SMTP (Mailpit locally). Failed emails are retried and then moved to a dead-letter queue that admins can inspect and replay.
+- **Docs and tests:** Swagger UI per service, unit and API tests with Jest and supertest, and an integration suite that runs all three services against real NATS and SMTP.
 
 ## The brief
 
@@ -15,6 +20,15 @@ Build a Node.js microservice that simulates payment processing, exposing a RESTf
 - Unit tests (Mocha/Chai or Jest) and API documentation (Swagger or Markdown)
 - A Git repository with a README covering setup, API details and testing
 
+## What was added, and why
+
+The brief describes one service. Because it asks for a microservice, this repo splits the work into three services so the boundaries and the messaging between them are real rather than implied:
+
+- **Auth** gives every payment an owner. Users only see their own payments, and only an admin can change a payment's status. Without users, neither rule has anything to check.
+- **Notification** gives the payment events a consumer. Publishing events nobody reads would show nothing, so this service listens for them and stores in-app notifications and sends emails. It also handles duplicate deliveries and failed emails, which ties into the brief's focus on error handling.
+
+Everything else stays as simple as the brief asks: storage is in memory or a JSON file, there is no database, and auth covers only register and login (no refresh tokens, password reset or OAuth).
+
 ## Architecture
 
 | Component | Responsibility |
@@ -24,7 +38,7 @@ Build a Node.js microservice that simulates payment processing, exposing a RESTf
 | `services/notification` | Consumes payment events. Stores in-app notifications and sends email, with retries and a dead-letter queue |
 | `libs/shared` | Event contracts, NATS client wrapper, logger, error model, config, auth middleware |
 
-Services communicate through NATS JetStream. Each service owns its data, stored in memory or in a JSON file depending on configuration.
+Services communicate through NATS JetStream. Each service owns its data, stored in memory or in a JSON file depending on configuration. [docs/architecture.md](docs/architecture.md) has diagrams of the services, the payment flow and failure handling.
 
 ### Payment flow
 
@@ -97,6 +111,16 @@ pnpm dev
 `.env.example` lists the environment variables with values that work locally. The two seed passwords and `JWT_SECRET` are commented out, because they fall back to demo values outside production (see [Storage and demo accounts](#storage-and-demo-accounts)).
 
 `JWT_SECRET` signs access tokens in `auth`, and `payment` and `notification` verify them with it locally, so every service must use the same value. It must be at least 32 characters, or the service refuses to start. Outside production, services share a built-in dev secret. With `NODE_ENV=production` it has no default: set it, or every service refuses to start.
+
+Every service reads these:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `NODE_ENV` | `development` | `development`, `test` or `production`. Swagger UI and readable logs are on only in `development` |
+| `LOG_LEVEL` | `info` | Minimum log level (see [Logging](#logging)) |
+| `NATS_URL` | `nats://localhost:4222` | NATS server (`payment` and `notification`) |
+| `AUTH_PORT`, `PAYMENT_PORT`, `NOTIFICATION_PORT` | `3001`, `3002`, `3003` | Each service's HTTP port |
+| `STORAGE_DRIVER`, `DATA_DIR` | `file`, `data` | Where data is kept (see [Storage and demo accounts](#storage-and-demo-accounts)) |
 
 `LOGIN_RATE_LIMIT_MAX` (default `10`) and `LOGIN_RATE_LIMIT_WINDOW_MS` (default `900000`, 15 minutes) set how many failed logins `auth` allows per client IP in each window (see [Auth endpoints](#auth-endpoints)).
 
@@ -198,12 +222,13 @@ Emails sent by `notification` appear in the Mailpit web UI at http://localhost:8
 pnpm check       # lint and format (Biome via Ultracite)
 pnpm fix         # apply safe fixes
 pnpm typecheck   # TypeScript, including tests
-pnpm test        # Jest
+pnpm test        # unit and API tests (see Testing)
+pnpm build       # compile every package into dist/
 ```
 
 ## API
 
-Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod schemas. Endpoints are summarised below as they land.
+Each service serves Swagger UI and its OpenAPI 3.1 spec, generated from Zod schemas. The spec is the full reference, with request and response examples and every error response; the tables below summarise it.
 
 | Service | Swagger UI | Spec |
 |---|---|---|
@@ -215,7 +240,7 @@ Every service sends [helmet](https://helmetjs.github.io/)'s default security hea
 
 The docs are served only when `NODE_ENV=development`. With `test` or `production`, `/docs` returns the usual `404`.
 
-Once login and protected routes exist, call them from Swagger UI like this: log in with `POST /auth/login` on the auth service's page, copy `data.accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
+To call protected routes from Swagger UI, log in with `POST /auth/login` on the auth service's page, copy `data.accessToken` from the response, then click **Authorize** on the other service's page and paste it. Swagger UI sends it as `Authorization: Bearer <token>`. Each service runs on its own port, which the browser treats as a separate origin, so authorize once per service; the token survives page reloads.
 
 ### Responses
 
@@ -410,7 +435,17 @@ curl -i localhost:3002/nope
 
 ## Testing
 
-Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. API tests drive each service's `createApp` with supertest, using the in-memory storage adapter, so they need neither Docker nor a running server. `pnpm test:coverage` runs the same tests with a coverage report: a summary in the terminal and the full HTML report in `coverage/index.html`. Each service also has an `openapi.test.ts` that fails if an operation in its OpenAPI document lacks a description, examples, its error responses or its auth rules.
+| Command | Runs | Needs |
+|---|---|---|
+| `pnpm test` | Unit and API tests (`*.test.ts` next to the code) | Nothing else: no Docker, no running services |
+| `pnpm test -- services/auth` | The same, for one package | |
+| `pnpm test:coverage` | The same, with a coverage report | |
+| `pnpm test:integration` | The cross-service suite in `tests/integration/` | Docker, with `pnpm infra:test:up` first |
+
+- **Unit tests** cover each module on its own: the payment state machine, the services, the repository adapters, the processor, the outbox relay, the consumers and the email retry rules. Collaborators such as NATS, the gateway and SMTP are replaced with small fakes.
+- **API tests** drive each service's `createApp` with supertest over the in-memory storage adapter, so no server or Docker is needed. Every documented status of every endpoint has a test, including the error responses.
+- **OpenAPI tests:** each service has an `openapi.test.ts` that fails if an operation lacks a description, examples, its error responses or its auth rules, or if an example does not match its schema.
+- **Coverage:** `pnpm test:coverage` prints a summary in the terminal and writes the full HTML report to `coverage/index.html`.
 
 ### Integration tests
 
@@ -422,9 +457,36 @@ pnpm test:integration   # tests/integration/*.int.test.ts, one file at a time
 pnpm infra:test:down    # stop and remove the test containers
 ```
 
-It covers four flows: a payment settling and reaching its owner in-app and by email with one correlation ID throughout; temporary SMTP failures retried and then dead-lettered, and permanent rejections dead-lettered at once (switched on through Mailpit's chaos API); replaying a DLQ entry; and the same event delivered twice being handled once per channel. The services use ports `4101` to `4103`, in-memory storage, a gateway that always succeeds after 10 to 50 ms, and three email attempts 200 and 400 ms apart. `pnpm test` does not run this suite and needs no Docker. `pnpm infra:down` and `pnpm infra:reset` leave the test containers running; stop them with `pnpm infra:test:down`.
+It covers four flows: a payment settling and reaching its owner in-app and by email with one correlation ID throughout; temporary SMTP failures retried and then dead-lettered, and permanent rejections dead-lettered at once (switched on through Mailpit's chaos API); replaying a DLQ entry; and the same event delivered twice being handled once per channel. The services use ports `4101` to `4103`, in-memory storage, a gateway that always succeeds after 10 to 50 ms, and three email attempts 200 and 400 ms apart. The suite refuses to start if something already answers on those ports. `pnpm infra:down` and `pnpm infra:reset` leave the test containers running; stop them with `pnpm infra:test:down`.
+
+## Design notes
+
+- **Three services instead of one.** See [What was added, and why](#what-was-added-and-why).
+- **Events over NATS JetStream.** Durable streams and consumers with explicit acks mean an event survives a restart of either side, and `notification` can be down while payments keep working. Core NATS would drop messages nobody is listening for. ([ROADMAP decisions](ROADMAP.md#decisions), [BE-04-01](tasks/BE-04-01-event-catalogue.md))
+- **Outbox and inbox.** `payment` saves each event with its status change and publishes it afterwards, so a NATS outage never loses an event or blocks a request. `notification` records each handled event per channel, so a redelivered event is skipped instead of creating a second notification or email. ([BE-04-02](tasks/BE-04-02-payment-event-outbox.md), [BE-05-02](tasks/BE-05-02-idempotent-event-handling.md), [architecture](docs/architecture.md#failure-handling))
+- **Background processing.** `POST /payments` returns `pending` at once and a processor settles it later, like a payment sent to an asynchronous gateway, which is what "asynchronous operations" in the brief points at. The processor updates the payment in-process, not over HTTP. ([BE-03-05](tasks/BE-03-05-payment-processor.md))
+- **Compare-and-set updates.** Every status change checks the record's `version`, so an admin `PATCH` and the processor can never overwrite each other. ([BE-01-07](tasks/BE-01-07-repository-interface.md), [BE-03-04](tasks/BE-03-04-update-payment-status.md))
+- **Integer money.** Amounts are integers in minor units with an ISO 4217 code, so there is no floating-point rounding. ([BE-03-01](tasks/BE-03-01-payment-model.md))
+- **Memory or JSON-file storage.** The brief asks for simple persistence. A repository interface hides the choice, and the file adapter writes atomically (temporary file and rename, one writer per file). ([BE-01-08](tasks/BE-01-08-json-file-adapter.md))
+- **No cache.** Data already lives in memory, even with the file adapter, and each service runs as one instance, so Redis would add infrastructure without making anything faster.
+- **Email retries and a DLQ.** Failed emails are retried with growing delays and then dead-lettered, because JetStream has no dead-letter stream of its own. Admins can inspect and replay them. ([BE-05-05](tasks/BE-05-05-email-retries-dlq.md))
+
+### Known limitations
+
+These are deliberate trade-offs for a simulation:
+
+- **A gateway timeout marks the payment `failed`.** That is safe here because the simulated gateway never charges on a call it hangs on. A real system would treat a timeout as unknown and retry or ask the gateway before failing. ([BE-03-05](tasks/BE-03-05-payment-processor.md))
+- **An event NATS rejects for good would block that payment's later events.** The relay keeps one payment's events in order, so it retries the stuck event on every sweep. No such permanent error is known; a real system would cap attempts and move the event aside. ([BE-04-02](tasks/BE-04-02-payment-event-outbox.md))
+- **A redelivery that never reached the send still uses up an email attempt**, for example when the inbox file cannot be read. The email is not lost, but it gets fewer real sends before it is dead-lettered. ([BE-05-05](tasks/BE-05-05-email-retries-dlq.md))
+- **An email can be sent twice after a crash.** `notification` records an event as handled only after the email is sent, so a crash in between sends it again on redelivery, with the same `Message-ID` so a mail client can spot it. Recording first would risk losing the email instead. ([BE-05-02](tasks/BE-05-02-idempotent-event-handling.md))
+- **Under `pnpm dev` and `pnpm start`, one Ctrl+C reaches each service twice**, and the second signal force-exits before the graceful shutdown finishes. Running `node dist/main.js` directly, as a container would, is not affected. ([BE-01-05](tasks/BE-01-05-structured-logging.md))
 
 ## Project docs
 
+- [docs/architecture.md](docs/architecture.md): service, flow and failure-handling diagrams
 - [ROADMAP.md](ROADMAP.md): scope, decisions and status
 - [tasks/](tasks/): task docs for individual roadmap items
+
+## Licence
+
+[MIT](LICENSE)
