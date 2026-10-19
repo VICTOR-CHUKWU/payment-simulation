@@ -442,6 +442,78 @@ describe("createFileRepository", () => {
   });
 });
 
+describe("createFileRepository errors", () => {
+  const withFs = (overrides: Partial<FileSystem>): FileSystem => ({
+    mkdir,
+    open,
+    readdir,
+    readFile,
+    rename,
+    unlink,
+    writeFile,
+    ...overrides,
+  });
+
+  it("rethrows a read error other than a missing file", async () => {
+    const file = path.join(await tempDir(), "items.json");
+    const fs = withFs({
+      readFile: ((target: string, encoding: BufferEncoding) =>
+        target === file
+          ? Promise.reject(injected("EACCES"))
+          : readFile(target, encoding)) as typeof readFile,
+    });
+    await expect(
+      createFileRepository({ file, fs, schema: itemSchema })
+    ).rejects.toThrow("injected EACCES");
+  });
+
+  it("rethrows a lock error other than an existing lock", async () => {
+    const file = path.join(await tempDir(), "items.json");
+    const fs = withFs({
+      writeFile: (() => Promise.reject(injected("EROFS"))) as typeof writeFile,
+    });
+    await expect(
+      createFileRepository({ file, fs, schema: itemSchema })
+    ).rejects.toThrow("injected EROFS");
+  });
+
+  it("refuses when another process takes a stale lock first", async () => {
+    const file = path.join(await tempDir(), "items.json");
+    const lock = `${file}.lock`;
+    await writeFile(lock, "not-a-pid\n");
+    let attempts = 0;
+    const fs = withFs({
+      writeFile: (async (
+        target: string,
+        data: string,
+        options: Parameters<typeof writeFile>[2]
+      ) => {
+        if (target === lock) {
+          attempts += 1;
+          if (attempts === 2) {
+            await writeFile(lock, `${process.ppid}\n`);
+          }
+        }
+        return writeFile(target, data, options);
+      }) as typeof writeFile,
+    });
+    await expect(
+      createFileRepository({ file, fs, schema: itemSchema })
+    ).rejects.toThrow(`locked by process ${process.ppid}`);
+  });
+
+  it("rethrows a failure to remove a stale lock", async () => {
+    const file = path.join(await tempDir(), "items.json");
+    await writeFile(`${file}.lock`, "not-a-pid\n");
+    const fs = withFs({
+      unlink: (() => Promise.reject(injected("EPERM"))) as typeof unlink,
+    });
+    await expect(
+      createFileRepository({ file, fs, schema: itemSchema })
+    ).rejects.toThrow("injected EPERM");
+  });
+});
+
 describe("storageCheck", () => {
   it("reports the repository's health", async () => {
     const file = path.join(await tempDir(), "items.json");

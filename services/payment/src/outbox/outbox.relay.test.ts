@@ -409,4 +409,49 @@ describe("createOutboxRelay", () => {
 
     expect(published).toHaveLength(1);
   });
+
+  it("stops between one payment's events when stopped mid-publish", async () => {
+    const { block, create, outbox, payments, published, relay } = setup();
+    const payment = await create();
+    await transitionPayment(payments, payment.id, "processing");
+    const release = block();
+
+    const sweep = relay.sweep();
+    await flush();
+    const stopping = relay.stop();
+    release();
+    await stopping;
+    await sweep;
+
+    expect(published).toHaveLength(1);
+    expect(await outbox(payment.id)).toEqual([
+      expect.objectContaining({
+        event: expect.objectContaining({ type: "payment.processing" }),
+      }),
+    ]);
+  });
+
+  it("logs a cleanup error other than a version conflict as a failed sweep", async () => {
+    const { create, logged, outbox, relay } = setup({
+      wrap: (inner) => ({
+        ...inner,
+        update: () => Promise.reject(new Error("disk full")),
+      }),
+    });
+    const payment = await create();
+
+    await relay.sweep();
+
+    expect(logged("outbox sweep failed")).toHaveLength(1);
+    expect(await outbox(payment.id)).toHaveLength(1);
+  });
+
+  it("ignores a second start", async () => {
+    const { finds, relay } = setup();
+    relay.start();
+    relay.start();
+    await flush();
+
+    expect(finds()).toBe(1);
+  });
 });

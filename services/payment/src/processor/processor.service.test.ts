@@ -559,4 +559,38 @@ describe("createPaymentProcessor outbox", () => {
 
     expect(kicks()).toBe(0);
   });
+
+  it("logs a claim failure other than a skipped claim and charges nothing", async () => {
+    const { add, calls, logged, payments, processor } = started({
+      wrap: (inner) => ({
+        ...inner,
+        update: () => Promise.reject(new Error("disk full")),
+      }),
+    });
+    const payment = await add();
+
+    await processor.sweep();
+    await flush();
+
+    expect(calls).toHaveLength(0);
+    expect((await payments.get(payment.id))?.status).toBe("pending");
+    expect(logged("payment processing failed")).toEqual([
+      expect.objectContaining({ level: 50, paymentId: payment.id }),
+    ]);
+  });
+
+  it("logs a gateway error and leaves the payment processing for the next sweep", async () => {
+    const { add, calls, logged, payments, processor } = started();
+    const payment = await add();
+
+    await processor.sweep();
+    await flush();
+    calls[0]?.reject(new Error("gateway exploded"));
+    await flush();
+
+    expect((await payments.get(payment.id))?.status).toBe("processing");
+    expect(logged("payment processing failed")).toEqual([
+      expect.objectContaining({ level: 50, paymentId: payment.id }),
+    ]);
+  });
 });

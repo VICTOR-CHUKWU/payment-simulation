@@ -11,6 +11,8 @@ export function buildDocument(): OpenApiDocument {
   registerNotificationPaths(registry);
   registerDlqPaths(registry);
   return buildOpenApiDocument(registry, {
+    description:
+      "Turns payment events into in-app notifications and emails. Users read and dismiss their own notifications; admins inspect and replay emails that could not be sent.",
     title: "notification service",
     version: "0.0.0",
   });

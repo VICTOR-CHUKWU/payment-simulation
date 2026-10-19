@@ -79,9 +79,11 @@ export {
   buildOpenApiDocument,
   createOpenApiRegistry,
   docsRouter,
+  findOpenApiIssues,
   type OpenAPIRegistry,
   type OpenApiDocument,
   type OpenApiInfo,
+  type OperationAccess,
   problemResponses,
 } from "./openapi.js";
 export {

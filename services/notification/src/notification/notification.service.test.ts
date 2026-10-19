@@ -229,6 +229,46 @@ describe("markRead", () => {
   });
 });
 
+describe("markRead conflicts", () => {
+  it("rethrows the version conflict after 3 attempts", async () => {
+    const inner = createMemoryRepository<Notification>();
+    let updates = 0;
+    const repository: Repository<Notification> = {
+      ...inner,
+      update: (id) => {
+        updates += 1;
+        return Promise.reject(new VersionConflictError({ id }));
+      },
+    };
+    const { service } = setup(repository);
+    const e = event();
+    await service.record(e);
+    await expect(service.markRead(USER, e.eventId)).rejects.toBeInstanceOf(
+      VersionConflictError
+    );
+    expect(updates).toBe(3);
+  });
+
+  it("rethrows an update error other than a version conflict at once", async () => {
+    const inner = createMemoryRepository<Notification>();
+    let updates = 0;
+    const repository: Repository<Notification> = {
+      ...inner,
+      update: () => {
+        updates += 1;
+        return Promise.reject(new Error("disk full"));
+      },
+    };
+    const { service } = setup(repository);
+    const e = event();
+    await service.record(e);
+    await expect(service.markRead(USER, e.eventId)).rejects.toThrow(
+      "disk full"
+    );
+    expect(updates).toBe(1);
+  });
+});
+
 describe("markAllRead", () => {
   it("marks only the caller's unread notifications and counts them", async () => {
     const repository = createMemoryRepository<Notification>();

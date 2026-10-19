@@ -7,6 +7,8 @@ import {
   buildOpenApiDocument,
   createOpenApiRegistry,
   docsRouter,
+  findOpenApiIssues,
+  type OpenAPIRegistry,
   problemResponses,
 } from "./openapi.js";
 
@@ -177,5 +179,112 @@ describe("docsRouter", () => {
     expect(a.text).toContain("first service");
     expect(a.text).not.toContain("second service");
     expect(b.text).toContain("second service");
+  });
+});
+
+describe("findOpenApiIssues", () => {
+  const body = z
+    .object({ name: z.string() })
+    .meta({ example: { name: "x" }, id: "LintBody" });
+  const reply = z
+    .object({ ok: z.boolean() })
+    .meta({ example: { ok: true }, id: "LintReply" });
+  const bare = z.object({ ok: z.boolean() }).meta({ id: "LintBare" });
+
+  const complete = (registry: OpenAPIRegistry, path: string) =>
+    registry.registerPath({
+      description: "Does the thing.",
+      method: "post",
+      path,
+      request: { body: { content: { "application/json": { schema: body } } } },
+      responses: {
+        200: {
+          content: { "application/json": { schema: reply } },
+          description: "ok",
+        },
+        ...problemResponses(400, 401, 403, 500),
+      },
+      security: bearerSecurity,
+      summary: "Do",
+      tags: ["lint"],
+    });
+
+  const health = {
+    "GET /health/live": "public",
+    "GET /health/ready": "public",
+  } as const;
+
+  it("finds nothing wrong with a complete document", () => {
+    const registry = createOpenApiRegistry();
+    complete(registry, "/things");
+    const document = buildOpenApiDocument(registry, {
+      title: "t",
+      version: "1",
+    });
+    expect(
+      findOpenApiIssues(document, { ...health, "POST /things": "admin" })
+    ).toEqual([]);
+  });
+
+  it("reports each broken rule and unlisted or missing operations", () => {
+    const registry = createOpenApiRegistry();
+    registry.registerPath({
+      method: "post",
+      path: "/broken",
+      request: {
+        body: {
+          content: {
+            "application/json": { schema: z.object({ a: z.string() }) },
+          },
+        },
+      },
+      responses: {
+        200: {
+          content: { "application/json": { schema: bare } },
+          description: "ok",
+        },
+        404: {
+          content: { "application/json": { schema: bare } },
+          description: "x",
+        },
+      },
+    });
+    complete(registry, "/extra");
+    const document = buildOpenApiDocument(registry, {
+      title: "t",
+      version: "1",
+    });
+    expect(
+      findOpenApiIssues(document, {
+        ...health,
+        "GET /missing": "public",
+        "POST /broken": "admin",
+      })
+    ).toEqual([
+      "POST /broken: no summary",
+      "POST /broken: no description",
+      "POST /broken: no tag",
+      "POST /broken: request body has no example",
+      "POST /broken: 200 response has no example",
+      "POST /broken: 404 response is not problem+json",
+      "POST /broken: does not document 500",
+      "POST /broken: missing bearer security",
+      "POST /broken: does not document 401",
+      "POST /broken: does not document 403",
+      "POST /extra: not in the expected operations",
+      "GET /missing: expected but not documented",
+    ]);
+  });
+
+  it("reports security on a public operation", () => {
+    const registry = createOpenApiRegistry();
+    complete(registry, "/open");
+    const document = buildOpenApiDocument(registry, {
+      title: "t",
+      version: "1",
+    });
+    expect(
+      findOpenApiIssues(document, { ...health, "POST /open": "public" })
+    ).toEqual(["POST /open: public operation has security"]);
   });
 });

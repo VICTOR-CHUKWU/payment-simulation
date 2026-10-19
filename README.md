@@ -410,7 +410,7 @@ curl -i localhost:3002/nope
 
 ## Testing
 
-Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. API tests drive each service's `createApp` with supertest, using the in-memory storage adapter, so they need neither Docker nor a running server. This section will grow to cover cross-service integration tests.
+Run `pnpm test` from the repo root. To run one package, pass its path, for example `pnpm test -- services/auth`. Tests sit next to the code they cover as `*.test.ts`. API tests drive each service's `createApp` with supertest, using the in-memory storage adapter, so they need neither Docker nor a running server. `pnpm test:coverage` runs the same tests with a coverage report: a summary in the terminal and the full HTML report in `coverage/index.html`. Each service also has an `openapi.test.ts` that fails if an operation in its OpenAPI document lacks a description, examples, its error responses or its auth rules. This section will grow to cover cross-service integration tests.
 
 ## Project docs
 

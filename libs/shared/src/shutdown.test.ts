@@ -1,6 +1,8 @@
 import { Writable } from "node:stream";
 import { createLogger, type Logger } from "./logger.js";
-import { type ClosableServer, createShutdown } from "./shutdown.js";
+import { type ClosableServer, createShutdown, onShutdown } from "./shutdown.js";
+
+const { jest } = import.meta;
 
 function captureLogger() {
   const lines: Record<string, unknown>[] = [];
@@ -106,5 +108,75 @@ describe("createShutdown", () => {
       level: 50,
       msg: "closing the HTTP server failed",
     });
+  });
+});
+
+const closedServer: ClosableServer = {
+  close(callback) {
+    callback();
+    return this;
+  },
+};
+
+describe("onShutdown", () => {
+  const handlers = new Map<string, (signal: NodeJS.Signals) => Promise<void>>();
+
+  beforeEach(() => {
+    handlers.clear();
+    jest.spyOn(process, "once").mockImplementation(((
+      event: string,
+      handler: never
+    ) => {
+      handlers.set(event, handler);
+      return process;
+    }) as typeof process.once);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    process.exitCode = undefined;
+  });
+
+  it("registers SIGTERM and SIGINT once and sets the exit code from the shutdown", async () => {
+    const { lines, logger } = captureLogger();
+    onShutdown({
+      logger,
+      server: closedServer,
+      tasks: [() => Promise.reject(new Error("boom"))],
+    });
+    expect([...handlers.keys()].sort()).toEqual(["SIGINT", "SIGTERM"]);
+    await handlers.get("SIGTERM")?.("SIGTERM");
+    expect(process.exitCode).toBe(1);
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          msg: "shutdown signal received",
+          signal: "SIGTERM",
+        }),
+      ])
+    );
+  });
+
+  it("exits with 1 when the shutdown outlives the timeout", () => {
+    jest.useFakeTimers();
+    const exit = jest
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+    const { lines, logger } = captureLogger();
+    onShutdown({
+      logger,
+      server: closedServer,
+      tasks: [() => new Promise<void>(() => undefined)],
+      timeoutMs: 50,
+    });
+    handlers.get("SIGINT")?.("SIGINT");
+    jest.advanceTimersByTime(50);
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ msg: "shutdown timed out", timeoutMs: 50 }),
+      ])
+    );
   });
 });

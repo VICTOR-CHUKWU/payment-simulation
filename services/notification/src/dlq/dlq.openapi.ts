@@ -25,7 +25,7 @@ export function registerDlqPaths(registry: OpenAPIRegistry): void {
     request: { query: listDlqQuerySchema },
     responses: {
       200: { content: json(dlqPageSchema), description: "A page of entries" },
-      ...problemResponses(400, 401, 403),
+      ...problemResponses(400, 401, 403, 500),
     },
     security: bearerSecurity,
     summary: "List dead-lettered emails",
@@ -39,7 +39,7 @@ export function registerDlqPaths(registry: OpenAPIRegistry): void {
     request: { params: dlqSeqParamsSchema },
     responses: {
       200: { content: json(dlqEntryEnvelopeSchema), description: "The entry" },
-      ...problemResponses(400, 401, 403, 404),
+      ...problemResponses(400, 401, 403, 404, 500),
     },
     security: bearerSecurity,
     summary: "Get dead-lettered email",

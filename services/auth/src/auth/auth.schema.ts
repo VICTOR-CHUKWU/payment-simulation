@@ -9,7 +9,10 @@ export const registerBodySchema = z
       description: "8 to 72 bytes when UTF-8 encoded.",
     }),
   })
-  .meta({ id: "RegisterRequest" });
+  .meta({
+    example: { email: "ada@example.com", password: "Password1!" },
+    id: "RegisterRequest",
+  });
 
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 
@@ -18,7 +21,10 @@ export const loginBodySchema = z
     email: z.email(),
     password: z.string().min(1),
   })
-  .meta({ id: "LoginRequest" });
+  .meta({
+    example: { email: "user@example.com", password: "User123!" },
+    id: "LoginRequest",
+  });
 
 export type LoginBody = z.infer<typeof loginBodySchema>;
 
@@ -34,6 +40,17 @@ export const publicUserSchema = z
 export type PublicUser = z.infer<typeof publicUserSchema>;
 
 export const userEnvelopeSchema = dataResponseSchema(publicUserSchema).meta({
+  example: {
+    data: {
+      createdAt: "2026-10-19T10:00:00.000Z",
+      email: "ada@example.com",
+      id: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      role: "user",
+    },
+    message: "Account created",
+    status: 201,
+    success: true,
+  },
   id: "UserResponse",
 });
 
@@ -49,4 +66,17 @@ export type AccessTokenResponse = z.infer<typeof accessTokenResponseSchema>;
 
 export const accessTokenEnvelopeSchema = dataResponseSchema(
   accessTokenResponseSchema
-).meta({ id: "AccessTokenResponse" });
+).meta({
+  example: {
+    data: {
+      accessToken:
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3YzllNjY3OSJ9.c2lnbmF0dXJl",
+      expiresIn: 86_400,
+      tokenType: "Bearer",
+    },
+    message: "Logged in",
+    status: 200,
+    success: true,
+  },
+  id: "AccessTokenResponse",
+});

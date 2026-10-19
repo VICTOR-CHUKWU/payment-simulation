@@ -15,7 +15,10 @@ export const createPaymentBodySchema = z
       description: true,
     }).shape
   )
-  .meta({ id: "CreatePaymentRequest" });
+  .meta({
+    example: { amount: 150_000, currency: "NGN", description: "Order #42" },
+    id: "CreatePaymentRequest",
+  });
 
 export type CreatePaymentBody = z.infer<typeof createPaymentBodySchema>;
 
@@ -46,7 +49,10 @@ export const updatePaymentStatusBodySchema = z
       });
     }
   })
-  .meta({ id: "UpdatePaymentStatusRequest" });
+  .meta({
+    example: { failureReason: "Card declined by issuer", status: "failed" },
+    id: "UpdatePaymentStatusRequest",
+  });
 
 export type UpdatePaymentStatusBody = z.infer<
   typeof updatePaymentStatusBodySchema
@@ -65,4 +71,22 @@ export type PaymentResponse = z.infer<typeof paymentResponseSchema>;
 
 export const paymentEnvelopeSchema = dataResponseSchema(
   paymentResponseSchema
-).meta({ id: "PaymentResponse" });
+).meta({
+  example: {
+    data: {
+      amount: 150_000,
+      createdAt: "2026-10-19T10:00:00.000Z",
+      currency: "NGN",
+      description: "Order #42",
+      email: "user@example.com",
+      id: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      status: "pending",
+      updatedAt: "2026-10-19T10:00:00.000Z",
+      userId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    },
+    message: "Payment created",
+    status: 201,
+    success: true,
+  },
+  id: "PaymentResponse",
+});

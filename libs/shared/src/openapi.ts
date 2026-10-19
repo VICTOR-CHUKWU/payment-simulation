@@ -27,12 +27,19 @@ const problemDetails = problemDetailsSchema.meta({ id: "ProblemDetails" });
 
 const checkStatusSchema = z.enum(["ok", "fail"]);
 
-const liveSchema = z.object({ status: z.literal("ok") });
+const liveSchema = z
+  .object({ status: z.literal("ok") })
+  .meta({ example: { status: "ok" }, id: "Liveness" });
 
-const readySchema = z.object({
-  checks: z.record(z.string(), checkStatusSchema),
-  status: checkStatusSchema,
-});
+const readySchema = z
+  .object({
+    checks: z.record(z.string(), checkStatusSchema),
+    status: checkStatusSchema,
+  })
+  .meta({
+    example: { checks: { nats: "ok", storage: "ok" }, status: "ok" },
+    id: "Readiness",
+  });
 
 const json = (schema: z.ZodType) => ({
   "application/json": { schema },
@@ -82,6 +89,8 @@ export function createOpenApiRegistry(): OpenAPIRegistry {
     type: "http",
   });
   registry.registerPath({
+    description:
+      "Returns `200` while the process is up. It checks no dependencies, so a failing dependency never restarts the service.",
     method: "get",
     path: "/health/live",
     responses: {
@@ -91,6 +100,8 @@ export function createOpenApiRegistry(): OpenAPIRegistry {
     tags: ["health"],
   });
   registry.registerPath({
+    description:
+      "Runs every dependency check of this service (for example `nats`, `storage` or `consumers`) and returns `200` when all pass, or `503` with the failing ones marked `fail`.",
     method: "get",
     path: "/health/ready",
     responses: {
@@ -145,4 +156,151 @@ export function docsRouter(document: OpenApiDocument): Router {
     swaggerUi.setup(document, swaggerUiOptions)
   );
   return router;
+}
+
+export type OperationAccess = "public" | "bearer" | "admin";
+
+interface OperationObject {
+  description?: string;
+  requestBody?: { content?: Record<string, { schema?: unknown }> };
+  responses?: Record<
+    string,
+    { content?: Record<string, { schema?: unknown }> }
+  >;
+  security?: unknown;
+  summary?: string;
+  tags?: string[];
+}
+
+const METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+function resolveSchema(
+  document: OpenApiDocument,
+  schema: unknown
+): Record<string, unknown> | undefined {
+  if (typeof schema !== "object" || schema === null) {
+    return;
+  }
+  const ref = (schema as { $ref?: unknown }).$ref;
+  if (typeof ref !== "string") {
+    return schema as Record<string, unknown>;
+  }
+  const name = ref.replace("#/components/schemas/", "");
+  return document.components?.schemas?.[name] as
+    | Record<string, unknown>
+    | undefined;
+}
+
+const hasExample = (
+  document: OpenApiDocument,
+  content: Record<string, { schema?: unknown; example?: unknown }> | undefined
+): boolean =>
+  Object.values(content ?? {}).some(
+    (media) =>
+      media.example !== undefined ||
+      resolveSchema(document, media.schema)?.example !== undefined
+  );
+
+const ERROR_STATUS = /^[45]/;
+
+const isHealth = (path: string) => path.startsWith("/health/");
+
+function describeIssues(operation: OperationObject): string[] {
+  return [
+    ...(operation.summary ? [] : ["no summary"]),
+    ...(operation.description ? [] : ["no description"]),
+    ...(operation.tags?.length ? [] : ["no tag"]),
+  ];
+}
+
+function responseIssues(
+  document: OpenApiDocument,
+  path: string,
+  operation: OperationObject
+): string[] {
+  const issues: string[] = [];
+  if (
+    operation.requestBody &&
+    !hasExample(document, operation.requestBody.content)
+  ) {
+    issues.push("request body has no example");
+  }
+  const responses = operation.responses ?? {};
+  for (const [status, response] of Object.entries(responses)) {
+    if (status.startsWith("2") && !hasExample(document, response.content)) {
+      issues.push(`${status} response has no example`);
+    }
+    if (
+      ERROR_STATUS.test(status) &&
+      !isHealth(path) &&
+      response.content?.["application/problem+json"] === undefined
+    ) {
+      issues.push(`${status} response is not problem+json`);
+    }
+  }
+  if (!(isHealth(path) || "500" in responses)) {
+    issues.push("does not document 500");
+  }
+  return issues;
+}
+
+function accessIssues(
+  operation: OperationObject,
+  access: OperationAccess
+): string[] {
+  const statuses = Object.keys(operation.responses ?? {});
+  if (access === "public") {
+    return operation.security === undefined
+      ? []
+      : ["public operation has security"];
+  }
+  const secured =
+    JSON.stringify(operation.security ?? []) === JSON.stringify(bearerSecurity);
+  return [
+    ...(secured ? [] : ["missing bearer security"]),
+    ...(statuses.includes("401") ? [] : ["does not document 401"]),
+    ...(access === "admin" && !statuses.includes("403")
+      ? ["does not document 403"]
+      : []),
+  ];
+}
+
+function operationsOf(
+  document: OpenApiDocument
+): { key: string; operation: OperationObject; path: string }[] {
+  return Object.entries(document.paths ?? {}).flatMap(([path, item]) =>
+    METHODS.flatMap((method) => {
+      const operation = (item as Record<string, OperationObject | undefined>)[
+        method
+      ];
+      return operation === undefined
+        ? []
+        : [{ key: `${method.toUpperCase()} ${path}`, operation, path }];
+    })
+  );
+}
+
+export function findOpenApiIssues(
+  document: OpenApiDocument,
+  expected: Record<string, OperationAccess>
+): string[] {
+  const operations = operationsOf(document);
+  const issues = operations.flatMap(({ key, operation, path }) => {
+    const access = expected[key];
+    if (access === undefined) {
+      return [`${key}: not in the expected operations`];
+    }
+    return [
+      ...describeIssues(operation),
+      ...responseIssues(document, path, operation),
+      ...accessIssues(operation, access),
+    ].map((issue) => `${key}: ${issue}`);
+  });
+  const documented = new Set(operations.map(({ key }) => key));
+  return [
+    ...issues,
+    ...Object.keys(expected)
+      .filter((key) => !documented.has(key))
+      .map((key) => `${key}: expected but not documented`),
+  ];
 }
