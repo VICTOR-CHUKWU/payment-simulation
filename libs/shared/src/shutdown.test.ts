@@ -139,6 +139,7 @@ describe("onShutdown", () => {
   });
 
   it("registers SIGTERM and SIGINT once and sets the exit code from the shutdown", async () => {
+    jest.useFakeTimers({ doNotFake: ["setImmediate", "nextTick"] });
     const { lines, logger } = captureLogger();
     onShutdown({
       logger,
